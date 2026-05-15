@@ -149,3 +149,9 @@ msgstr "Làm lại"
 
 msgid "Clear Clipboard."
 msgstr "Xóa bộ nhớ tạm."
+
+msgid "Provides spoken feedback for common editing and clipboard actions."
+msgstr "Thông báo bằng giọng nói cho các thao tác chỉnh sửa và bộ nhớ tạm phổ biến."
+
+msgid "No user-facing feature changes. Project packaging and metadata were standardized for future releases."
+msgstr "Không có thay đổi tính năng cho người dùng. Cấu trúc đóng gói và metadata của dự án đã được chuẩn hóa cho các bản phát hành sau."

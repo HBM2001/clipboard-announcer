@@ -1,0 +1,151 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Clipboard Announcer 1.2\n"
+"POT-Creation-Date: 2026-04-30 09:55+0700\n"
+"PO-Revision-Date: 2026-04-30 09:55+0700\n"
+"Last-Translator: OpenAI Codex\n"
+"Language-Team: Vietnamese\n"
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Codex\n"
+
+msgid "Always announce"
+msgstr "Luôn thông báo"
+
+msgid "Smart (avoid repeated announcements)"
+msgstr "Thông minh (tránh lặp thông báo)"
+
+msgid "Clipboard Announcer"
+msgstr "Thông báo bộ nhớ tạm"
+
+msgid "Configure announcements and clipboard clearing behavior."
+msgstr "Cấu hình cách thông báo và xóa bộ nhớ tạm."
+
+msgid "Speak when these shortcuts are pressed"
+msgstr "Đọc khi nhấn các phím tắt này"
+
+msgid "Announcement behavior:"
+msgstr "Kiểu thông báo:"
+
+msgid "Shortcuts to announce"
+msgstr "Các phím tắt cần đọc"
+
+msgid "Announce Copy"
+msgstr "Thông báo Sao chép"
+
+msgid "Announce Cut"
+msgstr "Thông báo Cắt"
+
+msgid "Announce Paste"
+msgstr "Thông báo Dán"
+
+msgid "Announce Select All"
+msgstr "Thông báo Chọn tất cả"
+
+msgid "Announce Undo"
+msgstr "Thông báo Hoàn tác"
+
+msgid "Announce Redo"
+msgstr "Thông báo Làm lại"
+
+msgid "Announce Copy Path"
+msgstr "Thông báo Sao chép đường dẫn"
+
+msgid "Speak the result after clearing the clipboard"
+msgstr "Đọc kết quả sau khi xóa bộ nhớ tạm"
+
+msgid "Ask before clearing the clipboard"
+msgstr "Hỏi trước khi xóa bộ nhớ tạm"
+
+msgid "Clipboard warnings and status messages"
+msgstr "Cảnh báo và thông báo trạng thái của bộ nhớ tạm"
+
+msgid "Warn if you try to paste when the clipboard is empty"
+msgstr "Cảnh báo nếu bạn cố dán khi bộ nhớ tạm trống"
+
+msgid "Speak an error if the clipboard cannot be accessed"
+msgstr "Đọc lỗi nếu không thể truy cập bộ nhớ tạm"
+
+msgid "Copy"
+msgstr "Sao chép"
+
+msgid "Could not access clipboard"
+msgstr "Không thể truy cập bộ nhớ tạm"
+
+msgid "Nothing to paste"
+msgstr "Không có gì để dán"
+
+msgid "Paste"
+msgstr "Dán"
+
+msgid "Could not open the clipboard."
+msgstr "Không thể mở bộ nhớ tạm."
+
+msgid "Could not copy text to the clipboard."
+msgstr "Không thể sao chép văn bản vào bộ nhớ tạm."
+
+msgid "Clipboard is already empty."
+msgstr "Bộ nhớ tạm đã trống."
+
+msgid "Could not empty the clipboard."
+msgstr "Không thể làm trống bộ nhớ tạm."
+
+msgid "Clipboard is already empty"
+msgstr "Bộ nhớ tạm đã trống"
+
+msgid "Could not clear clipboard"
+msgstr "Không thể xóa bộ nhớ tạm"
+
+msgid "Clipboard cleared"
+msgstr "Đã xóa bộ nhớ tạm"
+
+msgid "Are you sure you want to clear the clipboard?"
+msgstr "Bạn có chắc muốn xóa bộ nhớ tạm không?"
+
+msgid "Open the Clipboard Announcer settings panel."
+msgstr "Mở bảng cài đặt thông báo bộ nhớ tạm."
+
+msgid "Copy the selected file or folder path."
+msgstr "Sao chép đường dẫn của tệp hoặc thư mục đã chọn."
+
+msgid "Path copied"
+msgstr "Đã sao chép đường dẫn"
+
+msgid "Copied %d paths"
+msgstr "Đã sao chép %d đường dẫn"
+
+msgid "Announce Copy."
+msgstr "Thông báo thao tác Sao chép."
+
+msgid "Announce Cut."
+msgstr "Thông báo thao tác Cắt."
+
+msgid "Cut"
+msgstr "Cắt"
+
+msgid "Announce Paste."
+msgstr "Thông báo thao tác Dán."
+
+msgid "Announce Select All."
+msgstr "Thông báo thao tác Chọn tất cả."
+
+msgid "Select all"
+msgstr "Chọn tất cả"
+
+msgid "Announce Undo."
+msgstr "Thông báo thao tác Hoàn tác."
+
+msgid "Undo"
+msgstr "Hoàn tác"
+
+msgid "Announce Redo."
+msgstr "Thông báo thao tác Làm lại."
+
+msgid "Redo"
+msgstr "Làm lại"
+
+msgid "Clear Clipboard."
+msgstr "Xóa bộ nhớ tạm."

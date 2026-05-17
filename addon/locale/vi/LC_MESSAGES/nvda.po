@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Clipboard Announcer 1.2\n"
-"POT-Creation-Date: 2026-05-17 12:00+0700\n"
-"PO-Revision-Date: 2026-05-17 12:00+0700\n"
+"POT-Creation-Date: 2026-05-17 19:30+0700\n"
+"PO-Revision-Date: 2026-05-17 19:30+0700\n"
 "Last-Translator: OpenAI Codex\n"
 "Language-Team: Vietnamese\n"
 "Language: vi\n"
@@ -174,11 +174,32 @@ msgstr "Sao chép tệp"
 msgid "Copy files"
 msgstr "Sao chép các tệp"
 
+msgid "Copy %d files"
+msgstr "Sao chép %d tệp"
+
 msgid "Copy image"
 msgstr "Sao chép hình ảnh"
 
 msgid "Copy clipboard content"
 msgstr "Sao chép nội dung bộ nhớ tạm"
+
+msgid "Cut text"
+msgstr "Cắt văn bản"
+
+msgid "Cut file"
+msgstr "Cắt tệp"
+
+msgid "Cut files"
+msgstr "Cắt các tệp"
+
+msgid "Cut %d files"
+msgstr "Cắt %d tệp"
+
+msgid "Cut image"
+msgstr "Cắt hình ảnh"
+
+msgid "Cut clipboard content"
+msgstr "Cắt nội dung bộ nhớ tạm"
 
 msgid "Paste text"
 msgstr "Dán văn bản"

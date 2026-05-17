@@ -228,6 +228,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._lastStatusMessage = None
 		self._lastStatusMessageTime = 0.0
 		self._clearConfirmationDialogOpen = False
+		self._silenceModeEnabled = False
 		self._pendingClipboardAnnouncement = None
 		self._pendingClipboardRetryCount = 0
 		self._pendingClipboardSequenceNumber = None
@@ -369,14 +370,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _shouldUseClipboardContentAwareness(self, configKey):
 		conf = _getConfig()
 		return (
-			conf["clipboardContentAwareness"]
+			not self._isSilenced()
+			and conf["clipboardContentAwareness"]
 			and conf["announcementsEnabled"]
 			and conf[configKey]
 		)
 
 	def _shouldAnnounceShortcut(self, configKey, actionName):
 		conf = _getConfig()
-		if not conf["announcementsEnabled"] or not conf[configKey]:
+		if self._isSilenced() or not conf["announcementsEnabled"] or not conf[configKey]:
 			return False
 
 		now = time.monotonic()
@@ -398,6 +400,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		requireAccessProblems=False,
 	):
 		conf = _getConfig()
+		if self._isSilenced():
+			return
 		if requireClearResult and not conf["announceClearResult"]:
 			return
 		if requireAccessProblems and not conf["announceClipboardAccessProblems"]:
@@ -414,6 +418,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._lastStatusMessage = message
 		self._lastStatusMessageTime = now
 		ui.message(message)
+
+	def _isSilenced(self):
+		return self._silenceModeEnabled
 
 	def _getContextAwareShortcutMessage(self, configKey, actionName):
 		conf = _getConfig()
@@ -696,6 +703,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _announceClipboardAwareActionMessage(self):
 		self._pendingClipboardAnnouncement = None
+		if self._isSilenced():
+			self._resetPendingClipboardAnnouncementState()
+			return
 		try:
 			clipboardDetails = self._getClipboardContentDetails()
 		except ClipboardAccessError:
@@ -835,6 +845,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	)
 	def script_openClipboardAnnouncerSettings(self, gesture):
 		wx.CallAfter(_openSettingsPanel)
+
+	@script(
+		description=_("Temporarily disable or enable Clipboard Announcer."),
+		gesture="kb:control+shift+s",
+		speakOnDemand=True,
+	)
+	def script_toggleTemporarySilence(self, gesture):
+		self._silenceModeEnabled = not self._silenceModeEnabled
+		if self._silenceModeEnabled:
+			ui.message(_("Clipboard Announcer temporarily disabled"))
+			return
+		ui.message(_("Clipboard Announcer enabled"))
 
 	@script(
 		description=_("Copy the selected file or folder path."),

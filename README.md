@@ -6,6 +6,7 @@ Clipboard Announcer is an NVDA add-on that speaks common editing and clipboard a
 
 - Speaks common editing shortcuts such as copy, cut, paste, select all, undo, and redo
 - Can optionally identify clipboard content types for Copy and Paste, such as text, files, or images
+- Can warn when Copy or Cut is pressed with nothing selected
 - Can copy the full path of the selected file or folder
 - Can clear the clipboard with a shortcut
 - Can warn you when you try to paste from an empty clipboard
@@ -21,12 +22,12 @@ Clipboard Announcer is an NVDA add-on that speaks common editing and clipboard a
 
 After installation, you can review or change the add-on settings from the NVDA Settings dialog.
 
-Clipboard content awareness for Copy and Paste is available as an optional setting and is turned off by default.
+Clipboard content awareness for Copy and Paste is available as an optional setting and is turned off by default. Context-aware announcements for Copy and Cut are built into the add-on.
 
 ## Default shortcuts
 
-- `Ctrl+C`: Announce copy, or identify copied clipboard content when enabled
-- `Ctrl+X`: Announce cut
+- `Ctrl+C`: Announce copy, identify copied clipboard content when enabled, or warn if nothing is selected
+- `Ctrl+X`: Announce cut, or warn if nothing is selected
 - `Ctrl+V`: Announce paste, or identify clipboard content being pasted when enabled
 - `Ctrl+A`: Announce select all
 - `Ctrl+Z`: Announce undo

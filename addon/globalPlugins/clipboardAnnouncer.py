@@ -10,6 +10,7 @@ import config
 import globalPluginHandler
 import gui
 import scriptHandler
+import textInfos
 import ui
 import wx
 from gui import guiHelper
@@ -269,22 +270,40 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			gesture.send()
 
 	def _announceCopyAndPassThrough(self, gesture):
+		contextMessage = self._getContextAwareShortcutMessage("announceCopy", "copy")
 		if self._executeBrowseModeCopyScript(gesture):
+			if contextMessage:
+				self._announceStatusMessage(contextMessage)
+				return
 			if self._shouldUseClipboardContentAwareness("announceCopy"):
 				self._scheduleClipboardCopyAnnouncement()
 			elif self._shouldAnnounceShortcut("announceCopy", "copy"):
 				ui.message(_("Copy"))
 			return
 		try:
-			if (
+			if contextMessage:
+				self._announceStatusMessage(contextMessage)
+			elif (
 				not self._shouldUseClipboardContentAwareness("announceCopy")
 				and self._shouldAnnounceShortcut("announceCopy", "copy")
 			):
 				ui.message(_("Copy"))
 		finally:
 			gesture.send()
+		if contextMessage:
+			return
 		if self._shouldUseClipboardContentAwareness("announceCopy"):
 			self._scheduleClipboardCopyAnnouncement()
+
+	def _announceCutAndPassThrough(self, gesture):
+		contextMessage = self._getContextAwareShortcutMessage("announceCut", "cut")
+		try:
+			if contextMessage:
+				self._announceStatusMessage(contextMessage)
+			elif self._shouldAnnounceShortcut("announceCut", "cut"):
+				ui.message(_("Cut"))
+		finally:
+			gesture.send()
 
 	def _executeBrowseModeCopyScript(self, gesture):
 		focus = api.getFocusObject()
@@ -380,46 +399,137 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._lastStatusMessageTime = now
 		ui.message(message)
 
-	def _getSelectedFileSystemPaths(self):
+	def _getContextAwareShortcutMessage(self, configKey, actionName):
+		conf = _getConfig()
+		if not conf["announcementsEnabled"] or not conf[configKey]:
+			return None
+
+		selectionState = self._getSelectionContextState()
+		if selectionState == "empty":
+			return {
+				"copy": _("Nothing to copy"),
+				"cut": _("Nothing to cut"),
+			}.get(actionName)
+		return None
+
+	def _getSelectionContextState(self):
+		browseModeSelectionState = self._getTextSelectionState(
+			self._getBrowseModeSelectionProvider()
+		)
+		if browseModeSelectionState != "unknown":
+			return browseModeSelectionState
+
+		focusSelectionState = self._getTextSelectionState(api.getFocusObject())
+		if focusSelectionState == "selected":
+			return "selected"
+
+		explorerSelectionState = self._getExplorerSelectionState()
+		if explorerSelectionState != "unknown":
+			if explorerSelectionState == "selected":
+				return "selected"
+			if focusSelectionState == "empty":
+				return "empty"
+			return explorerSelectionState
+
+		if focusSelectionState != "unknown":
+			return focusSelectionState
+		return "unknown"
+
+	def _getBrowseModeSelectionProvider(self):
+		focus = api.getFocusObject()
+		if not focus:
+			return None
+		treeInterceptor = getattr(focus, "treeInterceptor", None)
+		if not treeInterceptor or not getattr(treeInterceptor, "isReady", False):
+			return None
+		if getattr(treeInterceptor, "passThrough", True):
+			return None
+		return treeInterceptor
+
+	def _getTextSelectionState(self, selectionProvider):
+		makeTextInfo = getattr(selectionProvider, "makeTextInfo", None)
+		if not callable(makeTextInfo):
+			return "unknown"
+		try:
+			selection = makeTextInfo(textInfos.POSITION_SELECTION)
+		except Exception:
+			return "unknown"
+		if selection is None:
+			return "unknown"
+
+		isCollapsed = getattr(selection, "isCollapsed", None)
+		if isCollapsed is True:
+			return "empty"
+		if isCollapsed is False:
+			return "selected"
+
+		try:
+			selectionText = selection.text
+		except Exception:
+			return "unknown"
+		if selectionText is None:
+			return "unknown"
+		if selectionText:
+			return "selected"
+		return "empty"
+
+	def _getExplorerSelectionState(self):
+		shellWindow = self._getForegroundShellWindow()
+		if shellWindow is None:
+			return "unknown"
+		selectedPaths = self._extractStrictSelectedPaths(shellWindow)
+		if selectedPaths:
+			return "selected"
+		return "empty"
+
+	def _getForegroundShellWindow(self):
 		try:
 			from comtypes import client as comtypesClient
 		except ImportError:
-			return []
+			return None
 
 		foregroundHwnd = ctypes.windll.user32.GetForegroundWindow()
 		if not foregroundHwnd:
-			return []
+			return None
 
 		try:
 			shell = comtypesClient.CreateObject("Shell.Application", dynamic=True)
 			windows = shell.Windows()
 		except Exception:
-			return []
+			return None
 
 		for index in range(windows.Count):
 			try:
 				window = windows.Item(index)
-				if int(window.HWND) != foregroundHwnd:
-					continue
-				selectedPaths = self._extractSelectedPaths(window)
-				if selectedPaths:
-					return selectedPaths
+				if int(window.HWND) == foregroundHwnd:
+					return window
 			except Exception:
 				continue
-		return []
+		return None
 
-	def _extractSelectedPaths(self, shellWindow):
+	def _getSelectedFileSystemPaths(self):
+		shellWindow = self._getForegroundShellWindow()
+		if shellWindow is None:
+			return []
+		return self._extractSelectedPaths(shellWindow)
+
+	def _extractStrictSelectedPaths(self, shellWindow):
 		paths = []
 		try:
 			selectedItems = shellWindow.Document.SelectedItems()
 		except Exception:
-			selectedItems = None
+			return []
 
-		if selectedItems:
-			for index in range(selectedItems.Count):
-				path = self._getShellItemPath(selectedItems.Item(index))
-				if path:
-					paths.append(path)
+		if not selectedItems:
+			return []
+		for index in range(selectedItems.Count):
+			path = self._getShellItemPath(selectedItems.Item(index))
+			if path:
+				paths.append(path)
+		return paths
+
+	def _extractSelectedPaths(self, shellWindow):
+		paths = self._extractStrictSelectedPaths(shellWindow)
 		if paths:
 			return paths
 
@@ -716,7 +826,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		speakOnDemand=True,
 	)
 	def script_announceCut(self, gesture):
-		self._announceAndPassThrough(gesture, _("Cut"), "announceCut", "cut")
+		self._announceCutAndPassThrough(gesture)
 
 	@script(
 		description=_("Announce Paste."),

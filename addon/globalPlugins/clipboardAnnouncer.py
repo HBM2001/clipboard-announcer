@@ -1,4 +1,4 @@
-﻿# -*- coding: UTF-8 -*-
+# -*- coding: UTF-8 -*-
 # A simple NVDA global plugin that announces common editing shortcuts.
 
 import ctypes

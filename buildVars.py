@@ -20,7 +20,7 @@ addon_info = AddonInfo(
 	addon_version="1.2.1",
 	# Translators: Changelog text shown for this version in the add-on store.
 	addon_changelog=_(
-		"Added clipboard content awareness for Copy and Paste, improved Copy and Cut feedback when nothing is selected, added smarter announcements for multiple file selections, and introduced a shortcut to temporarily silence the add-on."
+		"Added clipboard content awareness for Copy and Paste, improved Copy and Cut feedback when nothing is selected, added smarter announcements for multiple file selections, and introduced a shortcut to temporarily disable the add-on."
 	),
 	addon_author="H2k1",
 	addon_url="https://github.com/HBM2001/clipboard-announcer",
@@ -42,6 +42,11 @@ i18nSources: list[str] = pythonSources + ["buildVars.py"]
 # Keep source markdown docs out of the packaged add-on.
 excludedFiles: list[str] = [
 	"doc/*/*.md",
+	"locale/**",
+	"__pycache__/**",
+	"globalPlugins/__pycache__/**",
+	"*.pyc",
+	"*.pyo",
 ]
 
 baseLanguage: str = "en"

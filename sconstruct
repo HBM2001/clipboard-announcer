@@ -84,7 +84,11 @@ env.Append(**env["addon_info"])
 addonFile = env.File("${addon_name}-${addon_version}.nvda-addon")
 addon = env.NVDAAddon(addonFile, env.Dir(addonDir), excludePatterns=buildVars.excludedFiles)
 
-langDirs: list[FS.Dir] = [env.Dir(d) for d in env.Glob(localeDir/"*/") if d.isdir()]
+langDirs: list[FS.Dir] = [
+	env.Dir(d)
+	for d in env.Glob(localeDir/"*/")
+	if d.isdir() and (Path(str(d)) / "LC_MESSAGES" / "nvda.po").is_file()
+]
 
 # Allow all NVDA's gettext po files to be compiled in source/locale, and manifest files to be generated
 moByLang: dict[str, FS.File] = {}

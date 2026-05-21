@@ -107,7 +107,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		self.announceRedoCheckbox = wx.CheckBox(self, label=_("Announce Redo"))
 		self.announceCopyPathCheckbox = wx.CheckBox(self, label=_("Announce Copy Path"))
 		self.clipboardContentAwarenessCheckbox = wx.CheckBox(
-			self, label=_("Use clipboard content awareness for Copy and Paste")
+			self, label=_("Use smart clipboard feedback for Copy, Cut, and Paste")
 		)
 
 		self.announceCopyCheckbox.SetValue(conf["announceCopy"])

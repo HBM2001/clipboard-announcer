@@ -23,7 +23,7 @@ Clipboard Announcer is an NVDA add-on that speaks common editing and clipboard a
 
 After installation, you can review or change the add-on settings from the NVDA Settings dialog.
 
-Clipboard content awareness for Copy, Cut, and Paste is available as an optional setting and is turned off by default. When enabled, it can identify clipboard content, announce file counts for Copy and Cut, and report when nothing is available to copy, cut, or paste.
+Clipboard content awareness for Copy, Cut, and Paste is enabled by default, and you can turn it off in the settings if you prefer. When enabled, it can identify clipboard content, announce file counts for Copy and Cut, and report when nothing is available to copy, cut, or paste.
 
 ## Default shortcuts
 

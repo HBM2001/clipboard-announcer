@@ -52,7 +52,6 @@ CONFIG_SPEC = {
 	"clipboardContentAwareness": "boolean(default=False)",
 	"announceClearResult": "boolean(default=True)",
 	"confirmBeforeClear": "boolean(default=False)",
-	"warnOnEmptyPaste": "boolean(default=False)",
 	"announceClipboardAccessProblems": "boolean(default=True)",
 }
 
@@ -147,10 +146,6 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		statusGroup = wx.StaticBoxSizer(
 			wx.VERTICAL, self, _("Clipboard warnings and status messages")
 		)
-		self.warnOnEmptyPasteCheckbox = wx.CheckBox(
-			self, label=_("Warn if you try to paste when the clipboard is empty")
-		)
-		self.warnOnEmptyPasteCheckbox.SetValue(conf["warnOnEmptyPaste"])
 		self.announceClipboardAccessProblemsCheckbox = wx.CheckBox(
 			self, label=_("Speak an error if the clipboard cannot be accessed")
 		)
@@ -158,10 +153,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 			conf["announceClipboardAccessProblems"]
 		)
 
-		for checkbox in (
-			self.warnOnEmptyPasteCheckbox,
-			self.announceClipboardAccessProblemsCheckbox,
-		):
+		for checkbox in (self.announceClipboardAccessProblemsCheckbox,):
 			statusGroup.Add(checkbox, border=5, flag=wx.BOTTOM)
 
 		settingsSizer.Add(statusGroup, border=10, flag=wx.TOP | wx.EXPAND)
@@ -185,7 +177,6 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		)
 		conf["announceClearResult"] = self.announceClearResultCheckbox.GetValue()
 		conf["confirmBeforeClear"] = self.confirmBeforeClearCheckbox.GetValue()
-		conf["warnOnEmptyPaste"] = self.warnOnEmptyPasteCheckbox.GetValue()
 		conf["announceClipboardAccessProblems"] = (
 			self.announceClipboardAccessProblemsCheckbox.GetValue()
 		)
@@ -283,7 +274,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			if contextMessage:
 				self._announceStatusMessage(contextMessage)
 				return
-			if self._shouldUseClipboardContentAwareness("announceCopy"):
+			if self._shouldUseClipboardAwareness("announceCopy"):
 				self._scheduleClipboardAwareActionAnnouncement(
 					"copy",
 					"announceCopy",
@@ -295,7 +286,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			if contextMessage:
 				self._announceStatusMessage(contextMessage)
 			elif (
-				not self._shouldUseClipboardContentAwareness("announceCopy")
+				not self._shouldUseClipboardAwareness("announceCopy")
 				and self._shouldAnnounceShortcut("announceCopy", "copy")
 			):
 				ui.message(_("Copy"))
@@ -303,7 +294,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			gesture.send()
 		if contextMessage:
 			return
-		if self._shouldUseClipboardContentAwareness("announceCopy"):
+		if self._shouldUseClipboardAwareness("announceCopy"):
 			self._scheduleClipboardAwareActionAnnouncement("copy", "announceCopy")
 
 	def _announceCutAndPassThrough(self, gesture):
@@ -311,7 +302,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			if contextMessage:
 				self._announceStatusMessage(contextMessage)
-			elif not self._shouldUseClipboardContentAwareness("announceCut") and self._shouldAnnounceShortcut(
+			elif not self._shouldUseClipboardAwareness("announceCut") and self._shouldAnnounceShortcut(
 				"announceCut", "cut"
 			):
 				ui.message(_("Cut"))
@@ -319,7 +310,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			gesture.send()
 		if contextMessage:
 			return
-		if self._shouldUseClipboardContentAwareness("announceCut"):
+		if self._shouldUseClipboardAwareness("announceCut"):
 			self._scheduleClipboardAwareActionAnnouncement("cut", "announceCut")
 
 	def _executeBrowseModeCopyScript(self, gesture):
@@ -348,7 +339,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _announcePasteAndPassThrough(self, gesture):
 		try:
-			conf = _getConfig()
 			try:
 				clipboardContentType = self._getClipboardContentType()
 			except ClipboardAccessError:
@@ -357,17 +347,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					requireAccessProblems=True,
 				)
 				return
-			if clipboardContentType == "empty" and conf["warnOnEmptyPaste"]:
+			if (
+				clipboardContentType == "empty"
+				and self._shouldUseClipboardAwareness("announcePaste")
+				and self._shouldAnnounceShortcut("announcePaste", "paste")
+			):
 				self._announceStatusMessage(_("Nothing to paste"))
 				return
-			if self._shouldUseClipboardContentAwareness("announcePaste"):
+			if self._shouldUseClipboardAwareness("announcePaste"):
 				self._announceClipboardAwarePasteMessage(clipboardContentType)
 			elif self._shouldAnnounceShortcut("announcePaste", "paste"):
 				ui.message(_("Paste"))
 		finally:
 			gesture.send()
 
-	def _shouldUseClipboardContentAwareness(self, configKey):
+	def _shouldUseClipboardAwareness(self, configKey):
 		conf = _getConfig()
 		return (
 			not self._isSilenced()
@@ -424,7 +418,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _getContextAwareShortcutMessage(self, configKey, actionName):
 		conf = _getConfig()
-		if not conf["announcementsEnabled"] or not conf[configKey]:
+		if (
+			not conf["announcementsEnabled"]
+			or not conf[configKey]
+			or not conf["clipboardContentAwareness"]
+		):
 			return None
 
 		selectionState = self._getSelectionContextState()

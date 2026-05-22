@@ -84,7 +84,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		conf = _getConfig()
 
 		self.enableAnnouncementsCheckbox = sHelper.addItem(
-			wx.CheckBox(self, label=_("Speak when these shortcuts are pressed"))
+			wx.CheckBox(self, label=_("Enable spoken shortcut feedback"))
 		)
 		self.enableAnnouncementsCheckbox.SetValue(conf["announcementsEnabled"])
 		self.enableAnnouncementsCheckbox.Bind(wx.EVT_CHECKBOX, self._onAnnouncementsToggle)
@@ -415,6 +415,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _isSilenced(self):
 		return self._silenceModeEnabled
+
+	def _shouldAnnounceTemporarySilenceStatus(self):
+		return _getConfig()["announcementsEnabled"]
 
 	def _getContextAwareShortcutMessage(self, configKey, actionName):
 		conf = _getConfig()
@@ -850,6 +853,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		speakOnDemand=True,
 	)
 	def script_toggleTemporarySilence(self, gesture):
+		if not self._shouldAnnounceTemporarySilenceStatus():
+			ui.message(
+				_("Spoken shortcut feedback is currently disabled")
+			)
+			return
 		self._silenceModeEnabled = not self._silenceModeEnabled
 		if self._silenceModeEnabled:
 			ui.message(_("Clipboard Announcer temporarily disabled"))

@@ -1,3 +1,10 @@
+## 1.2.2
+
+- Refined smart clipboard feedback behavior for Copy, Cut, and Paste.
+- Smart clipboard feedback is now enabled by default.
+- Improved temporary silence behavior when spoken shortcut feedback is disabled.
+- Clarified settings labels and updated documentation.
+
 ## 1.2.1
 
 - Added optional clipboard content awareness for Copy and Paste.

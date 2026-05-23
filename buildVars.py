@@ -17,10 +17,10 @@ addon_info = AddonInfo(
 	addon_summary=_("Clipboard Announcer"),
 	# Translators: Description shown for this add-on in the add-on store.
 	addon_description=_("Provides spoken feedback for common editing and clipboard actions."),
-	addon_version="1.2.1",
+	addon_version="1.2.2",
 	# Translators: Changelog text shown for this version in the add-on store.
 	addon_changelog=_(
-		"Added clipboard content awareness for Copy and Paste, improved Copy and Cut feedback when nothing is selected, added smarter announcements for multiple file selections, and introduced a shortcut to temporarily disable the add-on."
+		"Refined smart clipboard feedback for Copy, Cut, and Paste, enabled it by default, improved temporary silence behavior when spoken shortcut feedback is disabled, and clarified settings labels and documentation."
 	),
 	addon_author="H2k1",
 	addon_url="https://github.com/HBM2001/clipboard-announcer",

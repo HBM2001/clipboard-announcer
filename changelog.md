@@ -5,6 +5,7 @@
 - Improved temporary silence behavior when spoken shortcut feedback is disabled.
 - Clarified settings labels and updated documentation.
 - Fixed file count feedback for copying and cutting multiple files on NVDA 2026.1.
+- Fixed an issue that could cause Clipboard Announcer to stop working intermittently on NVDA 2026.1.
 
 ## 1.2.1
 

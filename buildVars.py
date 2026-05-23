@@ -20,7 +20,7 @@ addon_info = AddonInfo(
 	addon_version="1.2.2",
 	# Translators: Changelog text shown for this version in the add-on store.
 	addon_changelog=_(
-		"Refined smart clipboard feedback for Copy, Cut, and Paste, enabled it by default, improved temporary silence behavior when spoken shortcut feedback is disabled, and clarified settings labels and documentation."
+		"Refined smart clipboard feedback for Copy, Cut, and Paste, enabled it by default, improved temporary silence behavior when spoken shortcut feedback is disabled, clarified settings labels and documentation, and fixed file count feedback for file copy and cut on NVDA 2026.1."
 	),
 	addon_author="H2k1",
 	addon_url="https://github.com/HBM2001/clipboard-announcer",

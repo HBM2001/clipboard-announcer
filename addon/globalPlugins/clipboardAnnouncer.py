@@ -225,6 +225,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardSequenceNumber = None
 		self._pendingClipboardActionName = None
 		self._pendingClipboardConfigKey = None
+		self._pendingClipboardSelectedItemCount = 0
 		self._registerConfig()
 		self._registerSettingsPanel()
 
@@ -239,6 +240,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardSequenceNumber = None
 		self._pendingClipboardActionName = None
 		self._pendingClipboardConfigKey = None
+		self._pendingClipboardSelectedItemCount = 0
 		self._unregisterSettingsPanel()
 		super().terminate()
 
@@ -270,6 +272,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _announceCopyAndPassThrough(self, gesture):
 		contextMessage = self._getContextAwareShortcutMessage("announceCopy", "copy")
+		selectedItemCount = self._getSelectedFileSystemItemCount()
 		if self._executeBrowseModeCopyScript(gesture):
 			if contextMessage:
 				self._announceStatusMessage(contextMessage)
@@ -278,6 +281,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				self._scheduleClipboardAwareActionAnnouncement(
 					"copy",
 					"announceCopy",
+					selectedItemCount=selectedItemCount,
 				)
 			elif self._shouldAnnounceShortcut("announceCopy", "copy"):
 				ui.message(_("Copy"))
@@ -295,10 +299,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if contextMessage:
 			return
 		if self._shouldUseClipboardAwareness("announceCopy"):
-			self._scheduleClipboardAwareActionAnnouncement("copy", "announceCopy")
+			self._scheduleClipboardAwareActionAnnouncement(
+				"copy",
+				"announceCopy",
+				selectedItemCount=selectedItemCount,
+			)
 
 	def _announceCutAndPassThrough(self, gesture):
 		contextMessage = self._getContextAwareShortcutMessage("announceCut", "cut")
+		selectedItemCount = self._getSelectedFileSystemItemCount()
 		try:
 			if contextMessage:
 				self._announceStatusMessage(contextMessage)
@@ -311,7 +320,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if contextMessage:
 			return
 		if self._shouldUseClipboardAwareness("announceCut"):
-			self._scheduleClipboardAwareActionAnnouncement("cut", "announceCut")
+			self._scheduleClipboardAwareActionAnnouncement(
+				"cut",
+				"announceCut",
+				selectedItemCount=selectedItemCount,
+			)
 
 	def _executeBrowseModeCopyScript(self, gesture):
 		focus = api.getFocusObject()
@@ -537,6 +550,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return []
 		return self._extractSelectedPaths(shellWindow)
 
+	def _getSelectedFileSystemItemCount(self):
+		try:
+			shellWindow = self._getForegroundShellWindow()
+			if shellWindow is None:
+				return 0
+			return len(self._extractStrictSelectedPaths(shellWindow))
+		except Exception:
+			return 0
+
 	def _extractStrictSelectedPaths(self, shellWindow):
 		paths = []
 		try:
@@ -648,28 +670,34 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			and ctypes.windll.user32.IsClipboardFormatAvailable(pngClipboardFormat)
 		)
 
-	def _getClipboardAwareMessage(self, actionName, clipboardDetails):
+	def _getClipboardAwareMessage(
+		self,
+		actionName,
+		clipboardDetails,
+		fallbackItemCount=0,
+	):
 		clipboardContentType = clipboardDetails["type"]
 		itemCount = clipboardDetails.get("itemCount", 0)
+		resolvedItemCount = itemCount or fallbackItemCount
 		if actionName == "copy":
-			if clipboardContentType == "multipleFiles" and itemCount > 1:
-				return _("Copy %d files") % itemCount
+			if resolvedItemCount > 1 and clipboardContentType in ("multipleFiles", "files"):
+				return _("Copy %d files") % resolvedItemCount
 			return {
 				"text": _("Copy text"),
 				"singleFile": _("Copy file"),
 				"multipleFiles": _("Copy files"),
-				"files": _("Copy files"),
+				"files": _("Copy file") if resolvedItemCount == 1 else _("Copy files"),
 				"image": _("Copy image"),
 				"generic": _("Copy clipboard content"),
 			}.get(clipboardContentType, _("Copy"))
 		if actionName == "cut":
-			if clipboardContentType == "multipleFiles" and itemCount > 1:
-				return _("Cut %d files") % itemCount
+			if resolvedItemCount > 1 and clipboardContentType in ("multipleFiles", "files"):
+				return _("Cut %d files") % resolvedItemCount
 			return {
 				"text": _("Cut text"),
 				"singleFile": _("Cut file"),
 				"multipleFiles": _("Cut files"),
-				"files": _("Cut files"),
+				"files": _("Cut file") if resolvedItemCount == 1 else _("Cut files"),
 				"image": _("Cut image"),
 				"generic": _("Cut clipboard content"),
 			}.get(clipboardContentType, _("Cut"))
@@ -682,11 +710,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			"generic": _("Paste clipboard content"),
 		}.get(clipboardContentType, _("Paste"))
 
-	def _scheduleClipboardAwareActionAnnouncement(self, actionName, configKey):
+	def _scheduleClipboardAwareActionAnnouncement(
+		self,
+		actionName,
+		configKey,
+		selectedItemCount=0,
+	):
 		self._pendingClipboardRetryCount = 0
 		self._pendingClipboardSequenceNumber = self._getClipboardSequenceNumber()
 		self._pendingClipboardActionName = actionName
 		self._pendingClipboardConfigKey = configKey
+		self._pendingClipboardSelectedItemCount = selectedItemCount
 		self._scheduleNextClipboardActionAnnouncement(
 			CLIPBOARD_COPY_INITIAL_DELAY_MS
 		)
@@ -716,8 +750,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 			self._resetPendingClipboardAnnouncementState()
 			return
-		clipboardContentType = clipboardDetails["type"]
-		if self._shouldRetryClipboardActionAnnouncement(clipboardContentType):
+		if self._shouldRetryClipboardActionAnnouncement(clipboardDetails):
 			self._pendingClipboardRetryCount += 1
 			self._scheduleNextClipboardActionAnnouncement(
 				CLIPBOARD_COPY_RETRY_DELAY_MS
@@ -725,8 +758,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		actionName = self._pendingClipboardActionName
 		configKey = self._pendingClipboardConfigKey
+		fallbackItemCount = self._pendingClipboardSelectedItemCount
 		if actionName and configKey and self._shouldAnnounceShortcut(configKey, actionName):
-			ui.message(self._getClipboardAwareMessage(actionName, clipboardDetails))
+			try:
+				message = self._getClipboardAwareMessage(
+					actionName,
+					clipboardDetails,
+					fallbackItemCount=fallbackItemCount,
+				)
+			except Exception:
+				message = _("Copy") if actionName == "copy" else _("Cut")
+			ui.message(message)
 		self._resetPendingClipboardAnnouncementState()
 
 	def _announceClipboardAwarePasteMessage(self, clipboardContentType):
@@ -748,7 +790,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			return None
 
-	def _shouldRetryClipboardActionAnnouncement(self, clipboardContentType):
+	def _shouldRetryClipboardActionAnnouncement(self, clipboardDetails):
 		if self._pendingClipboardRetryCount >= CLIPBOARD_COPY_MAX_RETRIES:
 			return False
 		currentSequenceNumber = self._getClipboardSequenceNumber()
@@ -758,13 +800,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			and currentSequenceNumber != self._pendingClipboardSequenceNumber
 		):
 			return False
-		return clipboardContentType == "empty"
+		clipboardContentType = clipboardDetails["type"]
+		itemCount = clipboardDetails.get("itemCount", 0)
+		return (
+			clipboardContentType == "empty"
+			or (
+				clipboardContentType == "files"
+				and itemCount == 0
+				and self._pendingClipboardSelectedItemCount > 0
+			)
+		)
 
 	def _resetPendingClipboardAnnouncementState(self):
 		self._pendingClipboardRetryCount = 0
 		self._pendingClipboardSequenceNumber = None
 		self._pendingClipboardActionName = None
 		self._pendingClipboardConfigKey = None
+		self._pendingClipboardSelectedItemCount = 0
 
 	def _clearClipboard(self):
 		self._openClipboard()

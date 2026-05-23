@@ -2,6 +2,7 @@
 # A simple NVDA global plugin that announces common editing shortcuts.
 
 import ctypes
+from ctypes import wintypes
 import time
 
 import addonHandler
@@ -32,7 +33,6 @@ CF_DIB = 8
 CF_HDROP = 15
 CF_UNICODETEXT = 13
 CF_DIBV5 = 17
-HDROP = ctypes.c_void_p
 ANNOUNCEMENT_MODE_ALWAYS = "always"
 ANNOUNCEMENT_MODE_SMART = "smart"
 ANNOUNCEMENT_MODE_CHOICES = (
@@ -54,6 +54,54 @@ CONFIG_SPEC = {
 	"confirmBeforeClear": "boolean(default=False)",
 	"announceClipboardAccessProblems": "boolean(default=True)",
 }
+
+_USER32 = ctypes.WinDLL("user32", use_last_error=True)
+_SHELL32 = ctypes.WinDLL("shell32", use_last_error=True)
+
+OpenClipboard = _USER32.OpenClipboard
+OpenClipboard.argtypes = [wintypes.HWND]
+OpenClipboard.restype = wintypes.BOOL
+
+CloseClipboard = _USER32.CloseClipboard
+CloseClipboard.argtypes = []
+CloseClipboard.restype = wintypes.BOOL
+
+CountClipboardFormats = _USER32.CountClipboardFormats
+CountClipboardFormats.argtypes = []
+CountClipboardFormats.restype = wintypes.INT
+
+IsClipboardFormatAvailable = _USER32.IsClipboardFormatAvailable
+IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+IsClipboardFormatAvailable.restype = wintypes.BOOL
+
+GetClipboardData = _USER32.GetClipboardData
+GetClipboardData.argtypes = [wintypes.UINT]
+GetClipboardData.restype = wintypes.HANDLE
+
+RegisterClipboardFormatW = _USER32.RegisterClipboardFormatW
+RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+RegisterClipboardFormatW.restype = wintypes.UINT
+
+GetClipboardSequenceNumber = _USER32.GetClipboardSequenceNumber
+GetClipboardSequenceNumber.argtypes = []
+GetClipboardSequenceNumber.restype = wintypes.DWORD
+
+GetForegroundWindow = _USER32.GetForegroundWindow
+GetForegroundWindow.argtypes = []
+GetForegroundWindow.restype = wintypes.HWND
+
+EmptyClipboard = _USER32.EmptyClipboard
+EmptyClipboard.argtypes = []
+EmptyClipboard.restype = wintypes.BOOL
+
+DragQueryFileW = _SHELL32.DragQueryFileW
+DragQueryFileW.argtypes = [
+	wintypes.HANDLE,
+	wintypes.UINT,
+	wintypes.LPWSTR,
+	wintypes.UINT,
+]
+DragQueryFileW.restype = wintypes.UINT
 
 
 class ClipboardEmptyError(RuntimeError):
@@ -525,7 +573,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except ImportError:
 			return None
 
-		foregroundHwnd = ctypes.windll.user32.GetForegroundWindow()
+		foregroundHwnd = GetForegroundWindow()
 		if not foregroundHwnd:
 			return None
 
@@ -610,7 +658,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			wx.TheClipboard.Close()
 
 	def _openClipboard(self):
-		if not ctypes.windll.user32.OpenClipboard(None):
+		if not OpenClipboard(None):
 			raise ClipboardAccessError(_("Could not open the clipboard."))
 
 	def _getClipboardState(self):
@@ -626,31 +674,37 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _getClipboardContentDetails(self):
 		self._openClipboard()
 		try:
-			if ctypes.windll.user32.CountClipboardFormats() == 0:
+			if CountClipboardFormats() == 0:
 				return {"type": "empty", "itemCount": 0}
-			if ctypes.windll.user32.IsClipboardFormatAvailable(CF_HDROP):
-				return self._getClipboardFileDropDetails()
+			if IsClipboardFormatAvailable(CF_HDROP):
+				try:
+					return self._getClipboardFileDropDetails()
+				except Exception:
+					return {"type": "files", "itemCount": 0}
 			if (
-				ctypes.windll.user32.IsClipboardFormatAvailable(CF_UNICODETEXT)
-				or ctypes.windll.user32.IsClipboardFormatAvailable(CF_TEXT)
+				IsClipboardFormatAvailable(CF_UNICODETEXT)
+				or IsClipboardFormatAvailable(CF_TEXT)
 			):
 				return {"type": "text", "itemCount": 0}
 			if self._hasImageClipboardFormat():
 				return {"type": "image", "itemCount": 0}
 			return {"type": "generic", "itemCount": 0}
 		finally:
-			ctypes.windll.user32.CloseClipboard()
+			CloseClipboard()
 
 	def _getClipboardFileDropDetails(self):
-		dropHandle = ctypes.windll.user32.GetClipboardData(CF_HDROP)
+		dropHandle = GetClipboardData(CF_HDROP)
 		if not dropHandle:
 			return {"type": "files", "itemCount": 0}
-		fileCount = ctypes.windll.shell32.DragQueryFileW(
-			HDROP(dropHandle),
-			0xFFFFFFFF,
-			None,
-			0,
-		)
+		try:
+			fileCount = DragQueryFileW(
+				dropHandle,
+				0xFFFFFFFF,
+				None,
+				0,
+			)
+		except Exception:
+			return {"type": "files", "itemCount": 0}
 		if fileCount == 1:
 			return {"type": "singleFile", "itemCount": 1}
 		if fileCount > 1:
@@ -659,15 +713,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _hasImageClipboardFormat(self):
 		if (
-			ctypes.windll.user32.IsClipboardFormatAvailable(CF_BITMAP)
-			or ctypes.windll.user32.IsClipboardFormatAvailable(CF_DIB)
-			or ctypes.windll.user32.IsClipboardFormatAvailable(CF_DIBV5)
+			IsClipboardFormatAvailable(CF_BITMAP)
+			or IsClipboardFormatAvailable(CF_DIB)
+			or IsClipboardFormatAvailable(CF_DIBV5)
 		):
 			return True
-		pngClipboardFormat = ctypes.windll.user32.RegisterClipboardFormatW("PNG")
+		pngClipboardFormat = RegisterClipboardFormatW("PNG")
 		return bool(
 			pngClipboardFormat
-			and ctypes.windll.user32.IsClipboardFormatAvailable(pngClipboardFormat)
+			and IsClipboardFormatAvailable(pngClipboardFormat)
 		)
 
 	def _getClipboardAwareMessage(
@@ -750,6 +804,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 			self._resetPendingClipboardAnnouncementState()
 			return
+		except Exception:
+			actionName = self._pendingClipboardActionName
+			configKey = self._pendingClipboardConfigKey
+			if actionName and configKey and self._shouldAnnounceShortcut(configKey, actionName):
+				ui.message(_("Copy") if actionName == "copy" else _("Cut"))
+			self._resetPendingClipboardAnnouncementState()
+			return
 		if self._shouldRetryClipboardActionAnnouncement(clipboardDetails):
 			self._pendingClipboardRetryCount += 1
 			self._scheduleNextClipboardActionAnnouncement(
@@ -786,7 +847,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _getClipboardSequenceNumber(self):
 		try:
-			return ctypes.windll.user32.GetClipboardSequenceNumber()
+			return GetClipboardSequenceNumber()
 		except Exception:
 			return None
 
@@ -821,12 +882,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _clearClipboard(self):
 		self._openClipboard()
 		try:
-			if ctypes.windll.user32.CountClipboardFormats() == 0:
+			if CountClipboardFormats() == 0:
 				raise ClipboardEmptyError(_("Clipboard is already empty."))
-			if not ctypes.windll.user32.EmptyClipboard():
+			if not EmptyClipboard():
 				raise OSError(_("Could not empty the clipboard."))
 		finally:
-			ctypes.windll.user32.CloseClipboard()
+			CloseClipboard()
 
 	def _performClipboardClear(self):
 		try:

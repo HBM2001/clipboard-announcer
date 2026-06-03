@@ -10,6 +10,7 @@ import api
 import config
 import globalPluginHandler
 import gui
+import keyboardHandler
 import scriptHandler
 import textInfos
 import ui
@@ -328,10 +329,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		finally:
 			gesture.send()
 
-	def _announceCopyAndPassThrough(self, gesture):
+	def _announceCopyAndPassThrough(self, gesture, copyGesture=None):
+		copyGesture = copyGesture or gesture
 		contextMessage = self._getContextAwareShortcutMessage("announceCopy", "copy")
 		selectedItemCount = self._getSelectedFileSystemItemCount()
-		if self._executeBrowseModeCopyScript(gesture):
+		if self._executeBrowseModeCopyScript(copyGesture):
 			if contextMessage:
 				self._announceStatusMessage(contextMessage)
 				return
@@ -353,7 +355,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			):
 				ui.message(_("Copy"))
 		finally:
-			gesture.send()
+			copyGesture.send()
 		if contextMessage:
 			return
 		if self._shouldUseClipboardAwareness("announceCopy"):
@@ -385,6 +387,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 
 	def _appendCopyAndPassThrough(self, gesture):
+		copyGesture = self._createCopyGesture()
 		try:
 			clipboardDetails = self._getClipboardContentDetails()
 		except ClipboardAccessError:
@@ -395,7 +398,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		clipboardContentType = clipboardDetails["type"]
 		if clipboardContentType == "empty":
-			self._announceCopyAndPassThrough(gesture)
+			self._announceCopyAndPassThrough(copyGesture)
 			return
 		if clipboardContentType != "text":
 			self._announceAppendCopyMessage(
@@ -412,19 +415,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		selectedItemCount = self._getSelectedFileSystemItemCount()
-		if self._executeBrowseModeCopyScript(gesture):
+		if self._executeBrowseModeCopyScript(copyGesture):
 			self._scheduleAppendCopyAnnouncement(
 				originalText,
 				selectedItemCount,
 				clipboardSequenceNumber,
 			)
 			return
-		gesture.send()
+		copyGesture.send()
 		self._scheduleAppendCopyAnnouncement(
 			originalText,
 			selectedItemCount,
 			clipboardSequenceNumber,
 		)
+
+	def _createCopyGesture(self):
+		return keyboardHandler.KeyboardInputGesture.fromName("control+c")
 
 	def _executeBrowseModeCopyScript(self, gesture):
 		focus = api.getFocusObject()

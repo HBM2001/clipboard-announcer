@@ -48,6 +48,7 @@ CONFIG_SPEC = {
 	"announceSelectAll": "boolean(default=True)",
 	"announceUndo": "boolean(default=True)",
 	"announceRedo": "boolean(default=True)",
+	"announceAppendCopy": "boolean(default=True)",
 	"announceCopyPath": "boolean(default=True)",
 	"clipboardContentAwareness": "boolean(default=True)",
 	"announceClearResult": "boolean(default=True)",
@@ -153,6 +154,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		self.announceSelectAllCheckbox = wx.CheckBox(self, label=_("Announce Select All"))
 		self.announceUndoCheckbox = wx.CheckBox(self, label=_("Announce Undo"))
 		self.announceRedoCheckbox = wx.CheckBox(self, label=_("Announce Redo"))
+		self.announceAppendCopyCheckbox = wx.CheckBox(self, label=_("Announce Append Copy"))
 		self.announceCopyPathCheckbox = wx.CheckBox(self, label=_("Announce Copy Path"))
 		self.clipboardContentAwarenessCheckbox = wx.CheckBox(
 			self, label=_("Use smart clipboard feedback for Copy, Cut, and Paste")
@@ -164,6 +166,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		self.announceSelectAllCheckbox.SetValue(conf["announceSelectAll"])
 		self.announceUndoCheckbox.SetValue(conf["announceUndo"])
 		self.announceRedoCheckbox.SetValue(conf["announceRedo"])
+		self.announceAppendCopyCheckbox.SetValue(conf["announceAppendCopy"])
 		self.announceCopyPathCheckbox.SetValue(conf["announceCopyPath"])
 		self.clipboardContentAwarenessCheckbox.SetValue(conf["clipboardContentAwareness"])
 
@@ -174,6 +177,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 			self.announceSelectAllCheckbox,
 			self.announceUndoCheckbox,
 			self.announceRedoCheckbox,
+			self.announceAppendCopyCheckbox,
 			self.announceCopyPathCheckbox,
 			self.clipboardContentAwarenessCheckbox,
 		):
@@ -219,6 +223,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		conf["announceSelectAll"] = self.announceSelectAllCheckbox.GetValue()
 		conf["announceUndo"] = self.announceUndoCheckbox.GetValue()
 		conf["announceRedo"] = self.announceRedoCheckbox.GetValue()
+		conf["announceAppendCopy"] = self.announceAppendCopyCheckbox.GetValue()
 		conf["announceCopyPath"] = self.announceCopyPathCheckbox.GetValue()
 		conf["clipboardContentAwareness"] = (
 			self.clipboardContentAwarenessCheckbox.GetValue()
@@ -249,6 +254,7 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 			self.announceSelectAllCheckbox,
 			self.announceUndoCheckbox,
 			self.announceRedoCheckbox,
+			self.announceAppendCopyCheckbox,
 			self.announceCopyPathCheckbox,
 			self.clipboardContentAwarenessCheckbox,
 		):
@@ -274,6 +280,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardActionName = None
 		self._pendingClipboardConfigKey = None
 		self._pendingClipboardSelectedItemCount = 0
+		self._pendingClipboardOperation = None
+		self._pendingClipboardOriginalText = None
 		self._registerConfig()
 		self._registerSettingsPanel()
 
@@ -289,6 +297,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardActionName = None
 		self._pendingClipboardConfigKey = None
 		self._pendingClipboardSelectedItemCount = 0
+		self._pendingClipboardOperation = None
+		self._pendingClipboardOriginalText = None
 		self._unregisterSettingsPanel()
 		super().terminate()
 
@@ -373,6 +383,48 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				"announceCut",
 				selectedItemCount=selectedItemCount,
 			)
+
+	def _appendCopyAndPassThrough(self, gesture):
+		try:
+			clipboardDetails = self._getClipboardContentDetails()
+		except ClipboardAccessError:
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireAccessProblems=True,
+			)
+			return
+		clipboardContentType = clipboardDetails["type"]
+		if clipboardContentType == "empty":
+			self._announceCopyAndPassThrough(gesture)
+			return
+		if clipboardContentType != "text":
+			self._announceAppendCopyMessage(
+				_("Clipboard text append requires text already in the clipboard")
+			)
+			return
+		try:
+			originalText = self._getClipboardText()
+		except ClipboardAccessError:
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireAccessProblems=True,
+			)
+			return
+		clipboardSequenceNumber = self._getClipboardSequenceNumber()
+		selectedItemCount = self._getSelectedFileSystemItemCount()
+		if self._executeBrowseModeCopyScript(gesture):
+			self._scheduleAppendCopyAnnouncement(
+				originalText,
+				selectedItemCount,
+				clipboardSequenceNumber,
+			)
+			return
+		gesture.send()
+		self._scheduleAppendCopyAnnouncement(
+			originalText,
+			selectedItemCount,
+			clipboardSequenceNumber,
+		)
 
 	def _executeBrowseModeCopyScript(self, gesture):
 		focus = api.getFocusObject()
@@ -657,6 +709,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		finally:
 			wx.TheClipboard.Close()
 
+	def _getClipboardText(self):
+		if not wx.TheClipboard.Open():
+			raise ClipboardAccessError(_("Could not open the clipboard."))
+		try:
+			textData = wx.TextDataObject()
+			if not wx.TheClipboard.GetData(textData):
+				raise ClipboardAccessError(_("Could not read text from the clipboard."))
+			return textData.GetText()
+		finally:
+			wx.TheClipboard.Close()
+
 	def _openClipboard(self):
 		if not OpenClipboard(None):
 			raise ClipboardAccessError(_("Could not open the clipboard."))
@@ -775,6 +838,25 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardActionName = actionName
 		self._pendingClipboardConfigKey = configKey
 		self._pendingClipboardSelectedItemCount = selectedItemCount
+		self._pendingClipboardOperation = "announceAction"
+		self._pendingClipboardOriginalText = None
+		self._scheduleNextClipboardActionAnnouncement(
+			CLIPBOARD_COPY_INITIAL_DELAY_MS
+		)
+
+	def _scheduleAppendCopyAnnouncement(
+		self,
+		originalText,
+		selectedItemCount=0,
+		sequenceNumber=None,
+	):
+		self._pendingClipboardRetryCount = 0
+		self._pendingClipboardSequenceNumber = sequenceNumber
+		self._pendingClipboardActionName = "appendCopy"
+		self._pendingClipboardConfigKey = "announceAppendCopy"
+		self._pendingClipboardSelectedItemCount = selectedItemCount
+		self._pendingClipboardOperation = "appendCopy"
+		self._pendingClipboardOriginalText = originalText
 		self._scheduleNextClipboardActionAnnouncement(
 			CLIPBOARD_COPY_INITIAL_DELAY_MS
 		)
@@ -792,7 +874,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _announceClipboardAwareActionMessage(self):
 		self._pendingClipboardAnnouncement = None
-		if self._isSilenced():
+		if self._isSilenced() and self._pendingClipboardOperation != "appendCopy":
 			self._resetPendingClipboardAnnouncementState()
 			return
 		try:
@@ -802,19 +884,34 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				_("Could not access clipboard"),
 				requireAccessProblems=True,
 			)
+			if self._pendingClipboardOperation == "appendCopy":
+				self._restorePendingAppendCopyText()
 			self._resetPendingClipboardAnnouncementState()
 			return
 		except Exception:
 			actionName = self._pendingClipboardActionName
 			configKey = self._pendingClipboardConfigKey
-			if actionName and configKey and self._shouldAnnounceShortcut(configKey, actionName):
+			if self._pendingClipboardOperation == "appendCopy":
+				self._restorePendingAppendCopyText()
+				self._announceAppendCopyMessage(_("Nothing to append"))
+			elif actionName and configKey and self._shouldAnnounceShortcut(configKey, actionName):
 				ui.message(_("Copy") if actionName == "copy" else _("Cut"))
 			self._resetPendingClipboardAnnouncementState()
 			return
-		if self._shouldRetryClipboardActionAnnouncement(clipboardDetails):
+		currentSequenceNumber = self._getClipboardSequenceNumber()
+		if self._shouldRetryClipboardActionAnnouncement(
+			clipboardDetails,
+			currentSequenceNumber,
+		):
 			self._pendingClipboardRetryCount += 1
 			self._scheduleNextClipboardActionAnnouncement(
 				CLIPBOARD_COPY_RETRY_DELAY_MS
+			)
+			return
+		if self._pendingClipboardOperation == "appendCopy":
+			self._completeAppendCopyAnnouncement(
+				clipboardDetails,
+				currentSequenceNumber,
 			)
 			return
 		actionName = self._pendingClipboardActionName
@@ -851,10 +948,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			return None
 
-	def _shouldRetryClipboardActionAnnouncement(self, clipboardDetails):
+	def _shouldRetryClipboardActionAnnouncement(
+		self,
+		clipboardDetails,
+		currentSequenceNumber,
+	):
 		if self._pendingClipboardRetryCount >= CLIPBOARD_COPY_MAX_RETRIES:
 			return False
-		currentSequenceNumber = self._getClipboardSequenceNumber()
+		if self._pendingClipboardOperation == "appendCopy":
+			if (
+				currentSequenceNumber is not None
+				and self._pendingClipboardSequenceNumber is not None
+			):
+				return currentSequenceNumber == self._pendingClipboardSequenceNumber
+			return clipboardDetails["type"] == "empty"
 		if (
 			currentSequenceNumber is not None
 			and self._pendingClipboardSequenceNumber is not None
@@ -878,6 +985,71 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardActionName = None
 		self._pendingClipboardConfigKey = None
 		self._pendingClipboardSelectedItemCount = 0
+		self._pendingClipboardOperation = None
+		self._pendingClipboardOriginalText = None
+
+	def _announceAppendCopyMessage(self, message):
+		if self._shouldAnnounceShortcut("announceAppendCopy", "appendCopy"):
+			ui.message(message)
+
+	def _restorePendingAppendCopyText(self):
+		originalText = self._pendingClipboardOriginalText
+		if originalText is None:
+			return False
+		try:
+			self._copyTextToClipboard(originalText)
+		except ClipboardAccessError:
+			return False
+		return True
+
+	def _completeAppendCopyAnnouncement(
+		self,
+		clipboardDetails,
+		currentSequenceNumber,
+	):
+		sequenceChanged = (
+			currentSequenceNumber is not None
+			and self._pendingClipboardSequenceNumber is not None
+			and currentSequenceNumber != self._pendingClipboardSequenceNumber
+		)
+		if not sequenceChanged:
+			self._restorePendingAppendCopyText()
+			self._announceAppendCopyMessage(_("Nothing to append"))
+			self._resetPendingClipboardAnnouncementState()
+			return
+		if clipboardDetails["type"] != "text":
+			self._restorePendingAppendCopyText()
+			self._announceAppendCopyMessage(_("Only copied text can be appended"))
+			self._resetPendingClipboardAnnouncementState()
+			return
+		try:
+			newText = self._getClipboardText()
+		except ClipboardAccessError:
+			self._restorePendingAppendCopyText()
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireAccessProblems=True,
+			)
+			self._resetPendingClipboardAnnouncementState()
+			return
+		if not newText:
+			self._restorePendingAppendCopyText()
+			self._announceAppendCopyMessage(_("Nothing to append"))
+			self._resetPendingClipboardAnnouncementState()
+			return
+		originalText = self._pendingClipboardOriginalText or ""
+		try:
+			self._copyTextToClipboard(originalText + newText)
+		except ClipboardAccessError:
+			self._restorePendingAppendCopyText()
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireAccessProblems=True,
+			)
+			self._resetPendingClipboardAnnouncementState()
+			return
+		self._announceAppendCopyMessage(_("Copied text appended"))
+		self._resetPendingClipboardAnnouncementState()
 
 	def _clearClipboard(self):
 		self._openClipboard()
@@ -1011,6 +1183,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	)
 	def script_announceCopy(self, gesture):
 		self._announceCopyAndPassThrough(gesture)
+
+	@script(
+		description=_("Append newly copied text to the existing clipboard text."),
+		speakOnDemand=True,
+	)
+	def script_appendCopiedText(self, gesture):
+		self._appendCopyAndPassThrough(gesture)
 
 	@script(
 		description=_("Announce Cut."),

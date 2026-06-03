@@ -6,6 +6,7 @@ Clipboard Announcer is an NVDA add-on that speaks common editing and clipboard a
 
 - Speaks common editing shortcuts such as copy, cut, paste, select all, undo, and redo
 - Can optionally use smart clipboard feedback for Copy, Cut, and Paste, including content detection, file counts, and empty-state feedback
+- Includes an optional append-copy command that adds newly copied text to the current clipboard text
 - Can be temporarily silenced with a shortcut when you do not want spoken feedback
 - Can copy the full path of the selected file or folder
 - Can clear the clipboard with a shortcut
@@ -34,6 +35,11 @@ After installation, you can review or change the add-on settings from the NVDA S
 - `Ctrl+Shift+S`: Temporarily disable or enable Clipboard Announcer
 - `Ctrl+Shift+C`: Copy the selected file or folder path
 - `Ctrl+Shift+X`: Clear the clipboard
+
+## Additional commands
+
+- `Append copied text to the existing clipboard text`: No default shortcut is assigned. You can bind it from NVDA `Input Gestures` under the `Clipboard Announcer` category.
+  When the clipboard is empty, the command behaves like a normal copy. When the clipboard contains non-text content, it leaves the clipboard unchanged.
 
 ## Compatibility
 

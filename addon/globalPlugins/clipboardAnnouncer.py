@@ -8,6 +8,7 @@ import time
 import addonHandler
 import api
 import config
+import controlTypes
 import globalPluginHandler
 import gui
 import keyboardHandler
@@ -30,6 +31,7 @@ CLIPBOARD_COPY_RETRY_DELAY_MS = 35
 CLIPBOARD_COPY_MAX_RETRIES = 2
 APPEND_COPY_DISPATCH_DELAY_MS = 40
 APPEND_COPY_DISPATCH_RETRY_MS = 25
+APPEND_COPY_DISPATCH_MAX_RETRIES = 40
 CF_TEXT = 1
 CF_BITMAP = 2
 CF_DIB = 8
@@ -295,6 +297,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardOperation = None
 		self._pendingClipboardOriginalText = None
 		self._pendingClipboardDispatch = None
+		self._pendingClipboardDispatchRetryCount = 0
 		self._registerConfig()
 		self._registerSettingsPanel()
 
@@ -316,6 +319,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardOperation = None
 		self._pendingClipboardOriginalText = None
 		self._pendingClipboardDispatch = None
+		self._pendingClipboardDispatchRetryCount = 0
 		self._unregisterSettingsPanel()
 		super().terminate()
 
@@ -403,6 +407,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 
 	def _appendCopyAndPassThrough(self, gesture):
+		if not self._isEditableAppendTarget():
+			self._announceAppendCopyMessage(
+				_("Append copy is only available in editable text fields")
+			)
+			return
 		try:
 			clipboardDetails = self._getClipboardContentDetails()
 		except ClipboardAccessError:
@@ -446,6 +455,36 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _createCopyGesture(self):
 		return keyboardHandler.KeyboardInputGesture.fromName("control+c")
+
+	def _isEditableAppendTarget(self):
+		focus = api.getFocusObject()
+		if not focus:
+			return False
+		treeInterceptor = getattr(focus, "treeInterceptor", None)
+		if treeInterceptor and getattr(treeInterceptor, "isReady", False):
+			if not getattr(treeInterceptor, "passThrough", True):
+				return False
+		states = getattr(focus, "states", set())
+		try:
+			stateEditable = controlTypes.State.EDITABLE
+		except AttributeError:
+			stateEditable = None
+		if stateEditable is not None and stateEditable in states:
+			return True
+		role = getattr(focus, "role", None)
+		try:
+			roleEditables = {
+				controlTypes.Role.EDITABLETEXT,
+				controlTypes.Role.RICHEDIT,
+				controlTypes.Role.PASSWORDEDIT,
+			}
+		except AttributeError:
+			roleEditables = set()
+		if role in roleEditables:
+			return True
+		return callable(getattr(focus, "makeTextInfo", None)) and bool(
+			stateEditable is not None and stateEditable in states
+		)
 
 	def _executeBrowseModeCopyScript(self, gesture):
 		focus = api.getFocusObject()
@@ -881,6 +920,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardSelectedItemCount = selectedItemCount
 		self._pendingClipboardOperation = operation
 		self._pendingClipboardOriginalText = originalText
+		self._pendingClipboardDispatchRetryCount = 0
 		self._schedulePendingCopyDispatch(APPEND_COPY_DISPATCH_DELAY_MS)
 
 	def _schedulePendingCopyDispatch(self, delayMs):
@@ -900,7 +940,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._resetPendingClipboardAnnouncementState()
 			return
 		if self._areModifierKeysDown():
+			if (
+				self._pendingClipboardDispatchRetryCount
+				>= APPEND_COPY_DISPATCH_MAX_RETRIES
+			):
+				self._dispatchPendingCopyActionIgnoringModifiers()
+				return
+			self._pendingClipboardDispatchRetryCount += 1
 			self._schedulePendingCopyDispatch(APPEND_COPY_DISPATCH_RETRY_MS)
+			return
+		self._dispatchPendingCopyActionIgnoringModifiers()
+
+	def _dispatchPendingCopyActionIgnoringModifiers(self):
+		operation = self._pendingClipboardOperation
+		actionName = self._pendingClipboardActionName
+		configKey = self._pendingClipboardConfigKey
+		if not operation or not actionName or not configKey:
+			self._resetPendingClipboardAnnouncementState()
 			return
 		copyGesture = self._createCopyGesture()
 		if self._executeBrowseModeCopyScript(copyGesture):
@@ -1079,6 +1135,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardSelectedItemCount = 0
 		self._pendingClipboardOperation = None
 		self._pendingClipboardOriginalText = None
+		self._pendingClipboardDispatchRetryCount = 0
 		if self._pendingClipboardDispatch and self._pendingClipboardDispatch.IsRunning():
 			self._pendingClipboardDispatch.Stop()
 		self._pendingClipboardDispatch = None

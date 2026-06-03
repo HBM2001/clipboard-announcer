@@ -29,12 +29,18 @@ CLIPBOARD_COPY_INITIAL_DELAY_MS = 20
 CLIPBOARD_COPY_RETRY_DELAY_MS = 35
 CLIPBOARD_COPY_MAX_RETRIES = 2
 APPEND_COPY_DISPATCH_DELAY_MS = 40
+APPEND_COPY_DISPATCH_RETRY_MS = 25
 CF_TEXT = 1
 CF_BITMAP = 2
 CF_DIB = 8
 CF_HDROP = 15
 CF_UNICODETEXT = 13
 CF_DIBV5 = 17
+VK_SHIFT = 0x10
+VK_CONTROL = 0x11
+VK_MENU = 0x12
+VK_LWIN = 0x5B
+VK_RWIN = 0x5C
 ANNOUNCEMENT_MODE_ALWAYS = "always"
 ANNOUNCEMENT_MODE_SMART = "smart"
 ANNOUNCEMENT_MODE_CHOICES = (
@@ -92,6 +98,10 @@ GetClipboardSequenceNumber.restype = wintypes.DWORD
 GetForegroundWindow = _USER32.GetForegroundWindow
 GetForegroundWindow.argtypes = []
 GetForegroundWindow.restype = wintypes.HWND
+
+GetAsyncKeyState = _USER32.GetAsyncKeyState
+GetAsyncKeyState.argtypes = [wintypes.INT]
+GetAsyncKeyState.restype = wintypes.SHORT
 
 EmptyClipboard = _USER32.EmptyClipboard
 EmptyClipboard.argtypes = []
@@ -889,6 +899,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if not operation or not actionName or not configKey:
 			self._resetPendingClipboardAnnouncementState()
 			return
+		if self._areModifierKeysDown():
+			self._schedulePendingCopyDispatch(APPEND_COPY_DISPATCH_RETRY_MS)
+			return
 		copyGesture = self._createCopyGesture()
 		if self._executeBrowseModeCopyScript(copyGesture):
 			self._scheduleNextClipboardActionAnnouncement(
@@ -908,6 +921,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._scheduleNextClipboardActionAnnouncement(
 			CLIPBOARD_COPY_INITIAL_DELAY_MS
 		)
+
+	def _areModifierKeysDown(self):
+		for virtualKey in (
+			VK_SHIFT,
+			VK_CONTROL,
+			VK_MENU,
+			VK_LWIN,
+			VK_RWIN,
+		):
+			try:
+				if GetAsyncKeyState(virtualKey) & 0x8000:
+					return True
+			except Exception:
+				continue
+		return False
 
 	def _scheduleNextClipboardActionAnnouncement(self, delayMs):
 		if (

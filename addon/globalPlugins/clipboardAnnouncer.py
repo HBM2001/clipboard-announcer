@@ -422,6 +422,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		clipboardContentType = clipboardDetails["type"]
 		if clipboardContentType == "empty":
+			contextMessage = self._getContextAwareShortcutMessage("announceCopy", "copy")
+			if contextMessage:
+				self._announceStatusMessage(contextMessage)
+				return
 			self._queuePendingCopyDispatch(
 				operation="appendCopyFallbackCopy",
 				actionName="copy",

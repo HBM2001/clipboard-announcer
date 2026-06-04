@@ -17,10 +17,10 @@ addon_info = AddonInfo(
 	addon_summary=_("Clipboard Announcer"),
 	# Translators: Description shown for this add-on in the add-on store.
 	addon_description=_("Provides spoken feedback for common editing and clipboard actions."),
-	addon_version="1.2.2",
+	addon_version="1.3.0",
 	# Translators: Changelog text shown for this version in the add-on store.
 	addon_changelog=_(
-		"Refined smart clipboard feedback for Copy, Cut, and Paste, enabled it by default, improved temporary silence behavior when spoken shortcut feedback is disabled, clarified settings labels and documentation, fixed file count feedback for file copy and cut on NVDA 2026.1, and fixed an issue that could cause Clipboard Announcer to stop working intermittently on NVDA 2026.1."
+		"Added append-copy support for text, improved append-copy reliability with custom gestures, restricted append-copy to editable text fields, fixed the empty clipboard fallback when no text is selected, and updated documentation."
 	),
 	addon_author="H2k1",
 	addon_url="https://github.com/HBM2001/clipboard-announcer",

@@ -1,3 +1,11 @@
+## 1.3.0
+
+- Added append-copy support for text.
+- Improved append-copy reliability with custom gestures.
+- Restricted append-copy to editable text fields.
+- Fixed the empty clipboard fallback when no text is selected.
+- Updated documentation.
+
 ## 1.2.2
 
 - Refined smart clipboard feedback behavior for Copy, Cut, and Paste.

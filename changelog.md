@@ -1,3 +1,7 @@
+## 1.3.1
+
+- Added Ukrainian translation. Thanks to George-br.
+
 ## 1.3.0
 
 - Added append-copy support for text.

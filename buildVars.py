@@ -17,10 +17,10 @@ addon_info = AddonInfo(
 	addon_summary=_("Clipboard Announcer"),
 	# Translators: Description shown for this add-on in the add-on store.
 	addon_description=_("Provides spoken feedback for common editing and clipboard actions."),
-	addon_version="1.3.0",
+	addon_version="1.3.1",
 	# Translators: Changelog text shown for this version in the add-on store.
 	addon_changelog=_(
-		"Added append-copy support for text, improved append-copy reliability with custom gestures, restricted append-copy to editable text fields, fixed the empty clipboard fallback when no text is selected, and updated documentation."
+		"Added Ukrainian translation. Thanks to George-br."
 	),
 	addon_author="H2k1",
 	addon_url="https://github.com/HBM2001/clipboard-announcer",

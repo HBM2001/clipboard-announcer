@@ -1,0 +1,380 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
+"POT-Creation-Date: 2026-06-06 19:37+0300\n"
+"PO-Revision-Date: 2026-06-06 22:46+0300\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.9\n"
+"X-Poedit-Basepath: .\n"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:49
+msgid "Always announce"
+msgstr "Завжди оголошувати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:50
+msgid "Smart (avoid repeated announcements)"
+msgstr "Розумний (уникати повторних оголошень)"
+
+#. Translators: Summary/title for this add-on shown in install dialogs and the add-on store.
+#: addon\globalPlugins\clipboardAnnouncer.py:142
+#: addon\globalPlugins\clipboardAnnouncer.py:281
+#: addon\globalPlugins\clipboardAnnouncer.py:1279 buildVars.py:17
+msgid "Clipboard Announcer"
+msgstr "Оголошення буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:143
+msgid "Configure announcements and clipboard clearing behavior."
+msgstr "Налаштування сповіщень та очищення буфера обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:150
+msgid "Enable spoken shortcut feedback"
+msgstr "Увімкнути голосові підказки комбінацій клавіш"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:156
+msgid "Announcement behavior:"
+msgstr "Поведінка оголошень:"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:164
+msgid "Shortcuts to announce"
+msgstr "Оголошення для комбінацій"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:165
+msgid "Announce Copy"
+msgstr "Оголошувати Копіювати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:166
+msgid "Announce Cut"
+msgstr "Оголошувати Вирізати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:167
+msgid "Announce Paste"
+msgstr "Оголошувати Вставити"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:168
+msgid "Announce Select All"
+msgstr "Оголошувати Вибрати все"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:169
+msgid "Announce Undo"
+msgstr "Оголошувати Скасувати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:170
+msgid "Announce Redo"
+msgstr "Оголошувати Повторити"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:171
+msgid "Announce Append Copy"
+msgstr "Оголошувати додати копію"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:172
+msgid "Announce Copy Path"
+msgstr "Оголошувати Копіювати шлях"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:174
+msgid "Use smart clipboard feedback for Copy, Cut, and Paste"
+msgstr ""
+"Використовувати інтелектуальні функції буфера обміну для команд «Копіювати», "
+"«Вирізати» та «Вставити»"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:203
+msgid "Speak the result after clearing the clipboard"
+msgstr "Оголошувати результат після очищення буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:208
+msgid "Ask before clearing the clipboard"
+msgstr "Запитувати перед очищенням буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:213
+msgid "Clipboard warnings and status messages"
+msgstr "Попередження та повідомлення про стан буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:216
+msgid "Speak an error if the clipboard cannot be accessed"
+msgstr ""
+"Оголошувати повідомлення про помилку, якщо немає доступу до буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:367
+#: addon\globalPlugins\clipboardAnnouncer.py:376
+#: addon\globalPlugins\clipboardAnnouncer.py:873
+#: addon\globalPlugins\clipboardAnnouncer.py:978
+#: addon\globalPlugins\clipboardAnnouncer.py:1034
+#: addon\globalPlugins\clipboardAnnouncer.py:1059
+#: addon\globalPlugins\clipboardAnnouncer.py:1080
+msgid "Copy"
+msgstr "Копіювати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:397
+#: addon\globalPlugins\clipboardAnnouncer.py:884
+#: addon\globalPlugins\clipboardAnnouncer.py:1034
+#: addon\globalPlugins\clipboardAnnouncer.py:1080
+msgid "Cut"
+msgstr "Вирізати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:412
+msgid "Append copy is only available in editable text fields"
+msgstr ""
+"Функція «Додати копію» доступна лише в полях, що підтримують редагування "
+"тексту"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:419
+#: addon\globalPlugins\clipboardAnnouncer.py:445
+#: addon\globalPlugins\clipboardAnnouncer.py:523
+#: addon\globalPlugins\clipboardAnnouncer.py:1020
+#: addon\globalPlugins\clipboardAnnouncer.py:1186
+#: addon\globalPlugins\clipboardAnnouncer.py:1202
+#: addon\globalPlugins\clipboardAnnouncer.py:1231
+#: addon\globalPlugins\clipboardAnnouncer.py:1252
+#: addon\globalPlugins\clipboardAnnouncer.py:1323
+#: addon\globalPlugins\clipboardAnnouncer.py:1402
+msgid "Could not access clipboard"
+msgstr "Не вдалося отримати доступ до буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:438
+msgid "Clipboard text append requires text already in the clipboard"
+msgstr ""
+"Для додавання тексту до буфера обміну потрібно, щоб текст уже був у буфері "
+"обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:532
+msgid "Nothing to paste"
+msgstr "Нічого вставити"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:537
+#: addon\globalPlugins\clipboardAnnouncer.py:892
+#: addon\globalPlugins\clipboardAnnouncer.py:1087
+msgid "Paste"
+msgstr "Вставити"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:611
+msgid "Nothing to copy"
+msgstr "Нічого копіювати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:612
+msgid "Nothing to cut"
+msgstr "Нічого вирізати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:768
+#: addon\globalPlugins\clipboardAnnouncer.py:778
+#: addon\globalPlugins\clipboardAnnouncer.py:789
+msgid "Could not open the clipboard."
+msgstr "Не вдалося відкрити буфер обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:771
+msgid "Could not copy text to the clipboard."
+msgstr "Не вдалося скопіювати текст у буфер обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:782
+msgid "Could not read text from the clipboard."
+msgstr "Не вдалося прочитати текст із буфера обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:865
+#, python-format
+msgid "Copy %d files"
+msgstr "Копіювати %d файлів"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:867
+msgid "Copy text"
+msgstr "Копіювати текст"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:868
+#: addon\globalPlugins\clipboardAnnouncer.py:870
+msgid "Copy file"
+msgstr "Копіювати файл"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:869
+#: addon\globalPlugins\clipboardAnnouncer.py:870
+msgid "Copy files"
+msgstr "Копіювати файли"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:871
+msgid "Copy image"
+msgstr "Копіювати зображення"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:872
+msgid "Copy clipboard content"
+msgstr "Копіювати вміст буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:876
+#, python-format
+msgid "Cut %d files"
+msgstr "Вирізати %d файлів"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:878
+msgid "Cut text"
+msgstr "Вирізати текст"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:879
+#: addon\globalPlugins\clipboardAnnouncer.py:881
+msgid "Cut file"
+msgstr "Вирізати файл"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:880
+#: addon\globalPlugins\clipboardAnnouncer.py:881
+msgid "Cut files"
+msgstr "Вирізати файли"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:882
+msgid "Cut image"
+msgstr "Вирізати зображення"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:883
+msgid "Cut clipboard content"
+msgstr "Вирізати вміст буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:886
+msgid "Paste text"
+msgstr "Вставити текст"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:887
+#: addon\globalPlugins\clipboardAnnouncer.py:888
+#: addon\globalPlugins\clipboardAnnouncer.py:889
+msgid "Paste files"
+msgstr "Вставити файли"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:890
+msgid "Paste image"
+msgstr "Вставити зображення"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:891
+msgid "Paste clipboard content"
+msgstr "Вставити вміст буфера обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:976
+#: addon\globalPlugins\clipboardAnnouncer.py:1032
+#: addon\globalPlugins\clipboardAnnouncer.py:1173
+#: addon\globalPlugins\clipboardAnnouncer.py:1193
+msgid "Nothing to append"
+msgstr "Нічого додавати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1178
+msgid "Only copied text can be appended"
+msgstr "Можна додати лише скопійований текст"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1207
+msgid "Copied text appended"
+msgstr "Скопійований текст додано"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1214
+msgid "Clipboard is already empty."
+msgstr "Буфер обміну вже порожній."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1216
+msgid "Could not empty the clipboard."
+msgstr "Не вдалося очистити буфер обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1225
+#: addon\globalPlugins\clipboardAnnouncer.py:1259
+#: addon\globalPlugins\clipboardAnnouncer.py:1409
+msgid "Clipboard is already empty"
+msgstr "Буфер обміну вже порожній"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1238
+msgid "Could not clear clipboard"
+msgstr "Не вдалося очистити буфер обміну"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1243
+msgid "Clipboard cleared"
+msgstr "Буфер обміну очищено"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1278
+msgid "Are you sure you want to clear the clipboard?"
+msgstr "Ви впевнені, що бажаєте очистити буфер обміну?"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1285
+msgid "Open the Clipboard Announcer settings panel."
+msgstr "Відкрити панель налаштувань Оголошення буфера обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1292
+msgid "Temporarily disable or enable Clipboard Announcer."
+msgstr ""
+"Тимчасово вимкнути або увімкнути функцію «Оголошення вмісту буфера обміну»."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1299
+msgid "Spoken shortcut feedback is currently disabled"
+msgstr "Наразі оголошення сполучень клавіш вимкнено"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1304
+msgid "Clipboard Announcer temporarily disabled"
+msgstr "Оголошення буфера обміну тимчасово вимкнено"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1306
+msgid "Clipboard Announcer enabled"
+msgstr "Оголошення буфера обміну увімкнено"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1309
+msgid "Copy the selected file or folder path."
+msgstr "Копіювати шлях до вибраного файлу або папки."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1331
+msgid "Path copied"
+msgstr "Шлях скопійовано"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1333
+#, python-format
+msgid "Copied %d paths"
+msgstr "Скопійовано %d шляху"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1336
+msgid "Announce Copy."
+msgstr "Оголошувати Копіювати."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1344
+msgid "Append newly copied text to the existing clipboard text."
+msgstr "Додати щойно скопійований текст до вмісту буфера обміну."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1351
+msgid "Announce Cut."
+msgstr "Оголошувати Вирізати."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1359
+msgid "Announce Paste."
+msgstr "Оголошувати Вставити."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1367
+msgid "Announce Select All."
+msgstr "Оголошувати Вибрати все."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1373
+msgid "Select all"
+msgstr "Вибрати все"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1377
+msgid "Announce Undo."
+msgstr "Оголошувати Скасувати."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1382
+msgid "Undo"
+msgstr "Скасувати"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1385
+msgid "Announce Redo."
+msgstr "Оголошувати Повторити."
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1390
+msgid "Redo"
+msgstr "Повторити"
+
+#: addon\globalPlugins\clipboardAnnouncer.py:1393
+msgid "Clear Clipboard."
+msgstr "Очистити буфер обміну."
+
+#. Translators: Description shown for this add-on in the add-on store.
+#: buildVars.py:19
+msgid "Provides spoken feedback for common editing and clipboard actions."
+msgstr "Надає голосові підказки для типових дій редагування та буфера обміну."
+
+#: buildVars.py:23
+msgid ""
+"Added append-copy support for text, improved append-copy reliability with "
+"custom gestures, restricted append-copy to editable text fields, fixed the "
+"empty clipboard fallback when no text is selected, and updated documentation."
+msgstr ""
+"Added append-copy support for text, improved append-copy reliability with "
+"custom gestures, restricted append-copy to editable text fields, fixed the "
+"empty clipboard fallback when no text is selected, and updated documentation."

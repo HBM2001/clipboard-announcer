@@ -32,6 +32,7 @@ CLIPBOARD_COPY_MAX_RETRIES = 2
 APPEND_COPY_DISPATCH_DELAY_MS = 40
 APPEND_COPY_DISPATCH_RETRY_MS = 25
 APPEND_COPY_DISPATCH_MAX_RETRIES = 40
+_UNSET = object()
 CF_TEXT = 1
 CF_BITMAP = 2
 CF_DIB = 8
@@ -351,59 +352,45 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _announceCopyAndPassThrough(self, gesture, copyGesture=None):
 		copyGesture = copyGesture or gesture
-		contextMessage = self._getContextAwareShortcutMessage("announceCopy", "copy")
-		selectedItemCount = self._getSelectedFileSystemItemCount()
+		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		if self._executeBrowseModeCopyScript(copyGesture):
-			if contextMessage:
-				self._announceStatusMessage(contextMessage)
-				return
 			if self._shouldUseClipboardAwareness("announceCopy"):
 				self._scheduleClipboardAwareActionAnnouncement(
 					"copy",
 					"announceCopy",
-					selectedItemCount=selectedItemCount,
+					sequenceNumber=clipboardSequenceNumber,
 				)
 			elif self._shouldAnnounceShortcut("announceCopy", "copy"):
 				ui.message(_("Copy"))
 			return
 		try:
-			if contextMessage:
-				self._announceStatusMessage(contextMessage)
-			elif (
-				not self._shouldUseClipboardAwareness("announceCopy")
-				and self._shouldAnnounceShortcut("announceCopy", "copy")
+			if not self._shouldUseClipboardAwareness("announceCopy") and self._shouldAnnounceShortcut(
+				"announceCopy", "copy"
 			):
 				ui.message(_("Copy"))
 		finally:
 			copyGesture.send()
-		if contextMessage:
-			return
 		if self._shouldUseClipboardAwareness("announceCopy"):
 			self._scheduleClipboardAwareActionAnnouncement(
 				"copy",
 				"announceCopy",
-				selectedItemCount=selectedItemCount,
+				sequenceNumber=clipboardSequenceNumber,
 			)
 
 	def _announceCutAndPassThrough(self, gesture):
-		contextMessage = self._getContextAwareShortcutMessage("announceCut", "cut")
-		selectedItemCount = self._getSelectedFileSystemItemCount()
+		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		try:
-			if contextMessage:
-				self._announceStatusMessage(contextMessage)
-			elif not self._shouldUseClipboardAwareness("announceCut") and self._shouldAnnounceShortcut(
+			if not self._shouldUseClipboardAwareness("announceCut") and self._shouldAnnounceShortcut(
 				"announceCut", "cut"
 			):
 				ui.message(_("Cut"))
 		finally:
 			gesture.send()
-		if contextMessage:
-			return
 		if self._shouldUseClipboardAwareness("announceCut"):
 			self._scheduleClipboardAwareActionAnnouncement(
 				"cut",
 				"announceCut",
-				selectedItemCount=selectedItemCount,
+				sequenceNumber=clipboardSequenceNumber,
 			)
 
 	def _appendCopyAndPassThrough(self, gesture):
@@ -896,9 +883,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		actionName,
 		configKey,
 		selectedItemCount=0,
+		sequenceNumber=_UNSET,
 	):
 		self._pendingClipboardRetryCount = 0
-		self._pendingClipboardSequenceNumber = self._getClipboardSequenceNumber()
+		if sequenceNumber is _UNSET:
+			sequenceNumber = self._getClipboardSequenceNumber()
+		self._pendingClipboardSequenceNumber = sequenceNumber
 		self._pendingClipboardActionName = actionName
 		self._pendingClipboardConfigKey = configKey
 		self._pendingClipboardSelectedItemCount = selectedItemCount
@@ -1044,6 +1034,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				CLIPBOARD_COPY_RETRY_DELAY_MS
 			)
 			return
+		if self._clipboardDidNotChangeForPendingAction(currentSequenceNumber):
+			actionName = self._pendingClipboardActionName
+			configKey = self._pendingClipboardConfigKey
+			if actionName and configKey and self._shouldAnnounceShortcut(configKey, actionName):
+				ui.message(_("Nothing to copy") if actionName == "copy" else _("Nothing to cut"))
+			self._resetPendingClipboardAnnouncementState()
+			return
 		if self._pendingClipboardOperation == "appendCopyFallbackCopy":
 			actionName = self._pendingClipboardActionName
 			configKey = self._pendingClipboardConfigKey
@@ -1107,6 +1104,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	):
 		if self._pendingClipboardRetryCount >= CLIPBOARD_COPY_MAX_RETRIES:
 			return False
+		if (
+			self._pendingClipboardOperation == "announceAction"
+			and currentSequenceNumber is not None
+			and self._pendingClipboardSequenceNumber is not None
+		):
+			return currentSequenceNumber == self._pendingClipboardSequenceNumber
 		if self._pendingClipboardOperation in ("appendCopy", "appendCopyFallbackCopy"):
 			if (
 				currentSequenceNumber is not None
@@ -1129,6 +1132,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				and itemCount == 0
 				and self._pendingClipboardSelectedItemCount > 0
 			)
+		)
+
+	def _clipboardDidNotChangeForPendingAction(self, currentSequenceNumber):
+		return (
+			self._pendingClipboardOperation == "announceAction"
+			and currentSequenceNumber is not None
+			and self._pendingClipboardSequenceNumber is not None
+			and currentSequenceNumber == self._pendingClipboardSequenceNumber
 		)
 
 	def _resetPendingClipboardAnnouncementState(self):

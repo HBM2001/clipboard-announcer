@@ -352,17 +352,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _announceCopyAndPassThrough(self, gesture, copyGesture=None):
 		copyGesture = copyGesture or gesture
-		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		if self._executeBrowseModeCopyScript(copyGesture):
-			if self._shouldUseClipboardAwareness("announceCopy"):
-				self._scheduleClipboardAwareActionAnnouncement(
-					"copy",
-					"announceCopy",
-					sequenceNumber=clipboardSequenceNumber,
-				)
-			elif self._shouldAnnounceShortcut("announceCopy", "copy"):
-				ui.message(_("Copy"))
 			return
+		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		try:
 			if not self._shouldUseClipboardAwareness("announceCopy") and self._shouldAnnounceShortcut(
 				"announceCopy", "copy"

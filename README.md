@@ -9,7 +9,8 @@ Clipboard Announcer is an NVDA add-on that speaks common editing and clipboard a
 - Includes an optional append-copy command that adds newly copied text to the current clipboard text
 - Can be temporarily silenced with a shortcut when you do not want spoken feedback
 - Can copy the full path of the selected file or folder
-- Can clear the clipboard with a shortcut
+- Keeps a persistent clipboard history for text and copied files, with keyboard selection and paste
+- Can clear the clipboard with a double-press shortcut
 - Can report clipboard access problems
 - Includes a settings panel in NVDA so you can choose which announcements to hear
 
@@ -26,7 +27,7 @@ After installation, you can review or change the add-on settings from the NVDA S
 
 ## Default shortcuts
 
-- `Ctrl+C`: Announce copy, or when enabled, identify copied clipboard content, announce file counts for copied items, or report when nothing is selected
+- `Ctrl+C`: Copy selected Windows Explorer or Desktop file and folder paths as text; elsewhere, announce copy or, when enabled, identify copied clipboard content, announce file counts, or report when nothing is selected
 - `Ctrl+X`: Announce cut, or when enabled, announce file counts for cut items or report when nothing is selected
 - `Ctrl+V`: Announce paste, or identify clipboard content being pasted and warn if the clipboard is empty when enabled
 - `Ctrl+A`: Announce select all
@@ -34,7 +35,15 @@ After installation, you can review or change the add-on settings from the NVDA S
 - `Ctrl+Y`: Announce redo
 - `Ctrl+Shift+S`: Temporarily disable or enable Clipboard Announcer
 - `Ctrl+Shift+C`: Copy the selected file or folder path
-- `Ctrl+Shift+X`: Clear the clipboard
+- `Ctrl+Shift+X`: Open clipboard history; press it twice within 0.6 seconds to clear the clipboard. Disable clipboard history in Clipboard Announcer settings to make this shortcut clear the clipboard immediately.
+
+## Clipboard history
+
+When clipboard history is enabled, the add-on records text and copied files from all applications, including applications that do not use the add-on's Copy shortcut. Items copied while it is disabled are not added. History is stored in the NVDA configuration directory and is retained after restarting NVDA. The most recent 500 items are kept; text items larger than 1 MiB are not recorded.
+
+In the Clipboard history dialog, use the arrow keys to select an item and press `Enter` to restore it to the Windows clipboard and paste it into the edit field that was active before the dialog opened. File-drop entries are displayed using their paths. Selecting a file item restores it as a Windows file-drop clipboard item. Press `Escape` to close the dialog.
+
+Open the context menu with the Applications key, `Shift+F10`, or a right click to pin or unpin an item, edit text items, or delete an item. You can also press `Delete` to remove the selected item. Pinned items stay at the top of the history and are kept when you choose `Clear all history`; deleting a pinned item requires confirmation. Use `Move pinned item up` and `Move pinned item down` to choose their persistent order.
 
 ## Additional commands
 

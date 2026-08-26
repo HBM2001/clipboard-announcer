@@ -3,6 +3,9 @@
 
 import ctypes
 from ctypes import wintypes
+import json
+import os
+import tempfile
 import time
 
 import addonHandler
@@ -10,6 +13,7 @@ import api
 import config
 import controlTypes
 import globalPluginHandler
+import globalVars
 import gui
 import keyboardHandler
 import scriptHandler
@@ -32,6 +36,13 @@ CLIPBOARD_COPY_MAX_RETRIES = 2
 APPEND_COPY_DISPATCH_DELAY_MS = 40
 APPEND_COPY_DISPATCH_RETRY_MS = 25
 APPEND_COPY_DISPATCH_MAX_RETRIES = 40
+CLIPBOARD_HISTORY_POLL_INTERVAL_MS = 250
+CLIPBOARD_HISTORY_DOUBLE_PRESS_WINDOW_MS = 600
+CLIPBOARD_HISTORY_MAX_ITEMS = 500
+CLIPBOARD_HISTORY_MAX_TEXT_BYTES = 1024 * 1024
+CLIPBOARD_HISTORY_FILE_NAME = "clipboardAnnouncer-history.json"
+SWC_DESKTOP = 0x8
+SWFO_NEEDDISPATCH = 0x1
 _UNSET = object()
 CF_TEXT = 1
 CF_BITMAP = 2
@@ -65,10 +76,12 @@ CONFIG_SPEC = {
 	"announceClearResult": "boolean(default=True)",
 	"confirmBeforeClear": "boolean(default=False)",
 	"announceClipboardAccessProblems": "boolean(default=True)",
+	"clipboardHistoryEnabled": "boolean(default=True)",
 }
 
 _USER32 = ctypes.WinDLL("user32", use_last_error=True)
 _SHELL32 = ctypes.WinDLL("shell32", use_last_error=True)
+_KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 OpenClipboard = _USER32.OpenClipboard
 OpenClipboard.argtypes = [wintypes.HWND]
@@ -102,6 +115,10 @@ GetForegroundWindow = _USER32.GetForegroundWindow
 GetForegroundWindow.argtypes = []
 GetForegroundWindow.restype = wintypes.HWND
 
+SetForegroundWindow = _USER32.SetForegroundWindow
+SetForegroundWindow.argtypes = [wintypes.HWND]
+SetForegroundWindow.restype = wintypes.BOOL
+
 GetAsyncKeyState = _USER32.GetAsyncKeyState
 GetAsyncKeyState.argtypes = [wintypes.INT]
 GetAsyncKeyState.restype = wintypes.SHORT
@@ -119,6 +136,14 @@ DragQueryFileW.argtypes = [
 ]
 DragQueryFileW.restype = wintypes.UINT
 
+GlobalLock = _KERNEL32.GlobalLock
+GlobalLock.argtypes = [wintypes.HGLOBAL]
+GlobalLock.restype = wintypes.LPVOID
+
+GlobalUnlock = _KERNEL32.GlobalUnlock
+GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+GlobalUnlock.restype = wintypes.BOOL
+
 
 class ClipboardEmptyError(RuntimeError):
 	pass
@@ -126,6 +151,207 @@ class ClipboardEmptyError(RuntimeError):
 
 class ClipboardAccessError(RuntimeError):
 	pass
+
+
+class ClipboardHistoryEmptyTextError(ValueError):
+	pass
+
+
+class ClipboardHistoryDialog(wx.Dialog):
+	"""A keyboard-first view of the add-on's persisted clipboard history."""
+
+	def __init__(self, plugin, entries):
+		super().__init__(
+			gui.mainFrame,
+			title=_("Clipboard history"),
+			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+		)
+		self._plugin = plugin
+		self._entries = entries
+		self.selectedEntry = None
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		sizer.Add(
+			wx.StaticText(
+				self,
+				label=_("History:"),
+			),
+			border=10,
+			flag=wx.ALL,
+		)
+		self._list = wx.ListBox(self, choices=[self._labelFor(entry) for entry in entries])
+		sizer.Add(self._list, proportion=1, border=10, flag=wx.LEFT | wx.RIGHT | wx.EXPAND)
+		if entries:
+			self._list.SetSelection(0)
+		buttonSizer = wx.StdDialogButtonSizer()
+		self._clearButton = wx.Button(self, label=_("Clear all history"))
+		buttonSizer.AddButton(self._clearButton)
+		buttonSizer.Realize()
+		sizer.Add(buttonSizer, border=10, flag=wx.ALL | wx.ALIGN_RIGHT)
+		self.SetSizerAndFit(sizer)
+		self.SetMinSize((480, 300))
+		self.CentreOnScreen()
+		self._list.Bind(wx.EVT_LISTBOX_DCLICK, self._onActivate)
+		self._list.Bind(wx.EVT_CONTEXT_MENU, self._onContextMenu)
+		self.Bind(wx.EVT_CHAR_HOOK, self._onCharHook)
+		self._clearButton.Bind(wx.EVT_BUTTON, self._onClear)
+		self.Bind(wx.EVT_CLOSE, self._onWindowClose)
+
+	def focusList(self):
+		self._list.SetFocus()
+
+	def _labelFor(self, entry):
+		pinnedPrefix = _("Pinned: ") if entry.get("pinned", False) else ""
+		if entry["type"] == "files":
+			paths = entry["paths"]
+			firstPath = paths[0] if paths else ""
+			return pinnedPrefix + firstPath
+		text = entry["text"].replace("\r", " ").replace("\n", " ").strip()
+		return pinnedPrefix + (text[:120] or _("(empty text)"))
+
+	def _onCharHook(self, evt):
+		keyCode = evt.GetKeyCode()
+		if keyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+			self._activateSelected()
+			return
+		if keyCode == wx.WXK_ESCAPE:
+			self.Close()
+			return
+		if keyCode in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE):
+			self._deleteSelected()
+			return
+		if keyCode in (wx.WXK_MENU, wx.WXK_WINDOWS_MENU):
+			self._showContextMenu()
+			return
+		if keyCode == wx.WXK_F10 and evt.ShiftDown():
+			self._showContextMenu()
+			return
+		evt.Skip()
+
+	def _onActivate(self, evt):
+		self._activateSelected()
+
+	def _activateSelected(self):
+		selection = self._list.GetSelection()
+		if selection != wx.NOT_FOUND:
+			self.selectedEntry = self._entries[selection]
+			self.EndModal(wx.ID_OK)
+
+	def _onClear(self, evt):
+		removedCount, pinnedCount = self._plugin._clearClipboardHistory()
+		self._refreshEntries()
+		if pinnedCount:
+			ui.message(
+				_("Cleared %d history items. Kept %d pinned items.")
+				% (removedCount, pinnedCount)
+			)
+			return
+		ui.message(_("Cleared %d history items.") % removedCount)
+
+	def _onContextMenu(self, evt):
+		position = evt.GetPosition()
+		if position != wx.DefaultPosition:
+			position = self._list.ScreenToClient(position)
+			selection = self._list.HitTest(position)
+			if selection != wx.NOT_FOUND:
+				self._list.SetSelection(selection)
+		self._showContextMenu(position)
+
+	def _showContextMenu(self, position=wx.DefaultPosition):
+		selection = self._list.GetSelection()
+		if selection == wx.NOT_FOUND:
+			return
+		entry = self._entries[selection]
+		menu = wx.Menu()
+		pinItem = menu.Append(
+			wx.ID_ANY,
+			_("Unpin history") if entry.get("pinned", False) else _("Pin history"),
+		)
+		moveUpItem = menu.Append(wx.ID_ANY, _("Move pinned item up"))
+		moveDownItem = menu.Append(wx.ID_ANY, _("Move pinned item down"))
+		moveUpItem.Enable(self._plugin._canMovePinnedClipboardHistoryEntry(entry, -1))
+		moveDownItem.Enable(self._plugin._canMovePinnedClipboardHistoryEntry(entry, 1))
+		editItem = menu.Append(wx.ID_ANY, _("Edit"))
+		editItem.Enable(entry["type"] == "text")
+		deleteItem = menu.Append(wx.ID_ANY, _("Delete"))
+		menu.Bind(wx.EVT_MENU, lambda evt: self._onPin(entry), pinItem)
+		menu.Bind(wx.EVT_MENU, lambda evt: self._onMovePinned(entry, -1), moveUpItem)
+		menu.Bind(wx.EVT_MENU, lambda evt: self._onMovePinned(entry, 1), moveDownItem)
+		menu.Bind(wx.EVT_MENU, lambda evt: self._onEdit(entry), editItem)
+		menu.Bind(wx.EVT_MENU, lambda evt: self._onDelete(entry), deleteItem)
+		try:
+			self._list.PopupMenu(menu, position)
+		finally:
+			menu.Destroy()
+
+	def _onPin(self, entry):
+		self._plugin._setClipboardHistoryPinned(entry, not entry.get("pinned", False))
+		self._refreshEntries(entry)
+
+	def _onMovePinned(self, entry, direction):
+		if self._plugin._movePinnedClipboardHistoryEntry(entry, direction):
+			self._refreshEntries(entry)
+
+	def _onEdit(self, entry):
+		if entry["type"] != "text":
+			return
+		dialog = wx.TextEntryDialog(
+			self,
+			_("Edit clipboard history text:"),
+			_("Edit history"),
+			value=entry["text"],
+			style=wx.OK | wx.CANCEL | wx.TE_MULTILINE,
+		)
+		try:
+			if dialog.ShowModal() != wx.ID_OK:
+				return
+			try:
+				newEntry = self._plugin._editClipboardHistoryText(
+					entry, dialog.GetValue()
+				)
+			except ClipboardHistoryEmptyTextError:
+				ui.message(_("History item cannot be empty"))
+				return
+		finally:
+			dialog.Destroy()
+		if newEntry is None:
+			ui.message(_("History item is too large"))
+			return
+		self._refreshEntries(newEntry)
+
+	def _onDelete(self, entry):
+		if entry.get("pinned", False):
+			dialog = wx.MessageDialog(
+				self,
+				_("Delete this pinned history item?"),
+				_("Clipboard history"),
+				wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+			)
+			try:
+				if dialog.ShowModal() != wx.ID_YES:
+					return
+			finally:
+				dialog.Destroy()
+		self._plugin._deleteClipboardHistoryEntry(entry)
+		self._refreshEntries()
+
+	def _deleteSelected(self):
+		selection = self._list.GetSelection()
+		if selection != wx.NOT_FOUND:
+			self._onDelete(self._entries[selection])
+
+	def _refreshEntries(self, selectedEntry=None):
+		self._entries = list(self._plugin._clipboardHistory)
+		self._list.Set([self._labelFor(entry) for entry in self._entries])
+		if not self._entries:
+			return
+		try:
+			selection = self._entries.index(selectedEntry)
+		except ValueError:
+			selection = 0
+		self._list.SetSelection(selection)
+
+	def _onWindowClose(self, evt):
+		evt.Skip()
 
 
 def _getConfig():
@@ -152,6 +378,13 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 		)
 		self.enableAnnouncementsCheckbox.SetValue(conf["announcementsEnabled"])
 		self.enableAnnouncementsCheckbox.Bind(wx.EVT_CHECKBOX, self._onAnnouncementsToggle)
+		self.enableClipboardHistoryCheckbox = sHelper.addItem(
+			wx.CheckBox(
+				self,
+				label=_("Enable clipboard history with Control+Shift+X"),
+			)
+		)
+		self.enableClipboardHistoryCheckbox.SetValue(conf["clipboardHistoryEnabled"])
 
 		self.announcementModeChoice = sHelper.addLabeledControl(
 			_("Announcement behavior:"),
@@ -229,6 +462,9 @@ class ClipboardAnnouncerSettingsPanel(SettingsPanel):
 	def onSave(self):
 		conf = _getConfig()
 		conf["announcementsEnabled"] = self.enableAnnouncementsCheckbox.GetValue()
+		conf["clipboardHistoryEnabled"] = (
+			self.enableClipboardHistoryCheckbox.GetValue()
+		)
 		conf["announcementMode"] = ANNOUNCEMENT_MODE_CHOICES[
 			self.announcementModeChoice.GetSelection()
 		][0]
@@ -299,10 +535,26 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._pendingClipboardOriginalText = None
 		self._pendingClipboardDispatch = None
 		self._pendingClipboardDispatchRetryCount = 0
+		self._clipboardHistory = []
+		self._clipboardHistoryMonitor = None
+		self._clipboardHistorySequenceNumber = None
+		self._clipboardHistoryShortcutTimer = None
+		self._clipboardHistoryDialog = None
+		self._clipboardHistoryPasteTargetHwnd = None
 		self._registerConfig()
 		self._registerSettingsPanel()
+		self._loadClipboardHistory()
+		self._clipboardHistorySequenceNumber = self._getClipboardSequenceNumber()
+		self._scheduleClipboardHistoryMonitor()
 
 	def terminate(self):
+		self._stopClipboardHistoryMonitor()
+		if self._clipboardHistoryShortcutTimer and self._clipboardHistoryShortcutTimer.IsRunning():
+			self._clipboardHistoryShortcutTimer.Stop()
+		self._clipboardHistoryShortcutTimer = None
+		if self._clipboardHistoryDialog:
+			self._clipboardHistoryDialog.Destroy()
+			self._clipboardHistoryDialog = None
 		if (
 			self._pendingClipboardAnnouncement
 			and self._pendingClipboardAnnouncement.IsRunning()
@@ -343,6 +595,310 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if ClipboardAnnouncerSettingsPanel in NVDASettingsDialog.categoryClasses:
 			NVDASettingsDialog.categoryClasses.remove(ClipboardAnnouncerSettingsPanel)
 
+	def _getClipboardHistoryPath(self):
+		configPath = getattr(getattr(globalVars, "appArgs", None), "configPath", None)
+		if not configPath:
+			raise OSError("NVDA configuration path is unavailable")
+		return os.path.join(configPath, CLIPBOARD_HISTORY_FILE_NAME)
+
+	def _loadClipboardHistory(self):
+		try:
+			with open(
+				self._getClipboardHistoryPath(), "r", encoding="utf-8"
+			) as historyFile:
+				entries = json.load(historyFile)
+		except (OSError, ValueError, TypeError):
+			return
+		if not isinstance(entries, list):
+			return
+		for entry in reversed(entries[:CLIPBOARD_HISTORY_MAX_ITEMS]):
+			if self._isValidClipboardHistoryEntry(entry):
+				self._addClipboardHistoryEntry(entry, save=False)
+
+	def _isValidClipboardHistoryEntry(self, entry):
+		if not isinstance(entry, dict):
+			return False
+		if entry.get("type") == "text":
+			return isinstance(entry.get("text"), str) and self._textFitsClipboardHistory(
+				entry["text"]
+			)
+		if entry.get("type") == "files":
+			paths = entry.get("paths")
+			return (
+				isinstance(paths, list)
+				and bool(paths)
+				and all(isinstance(path, str) and path for path in paths)
+			)
+		return False
+
+	def _normalizeClipboardHistoryEntry(self, entry):
+		normalizedEntry = dict(entry)
+		normalizedEntry["pinned"] = bool(entry.get("pinned", False))
+		return normalizedEntry
+
+	def _clipboardHistoryEntriesMatch(self, firstEntry, secondEntry):
+		if firstEntry.get("type") != secondEntry.get("type"):
+			return False
+		if firstEntry["type"] == "text":
+			return firstEntry.get("text") == secondEntry.get("text")
+		return firstEntry.get("paths") == secondEntry.get("paths")
+
+	def _textFitsClipboardHistory(self, text):
+		try:
+			return (
+				len(text.encode("utf-8", errors="surrogatepass"))
+				<= CLIPBOARD_HISTORY_MAX_TEXT_BYTES
+			)
+		except UnicodeError:
+			return False
+
+	def _saveClipboardHistory(self):
+		temporaryPath = None
+		try:
+			historyPath = self._getClipboardHistoryPath()
+			directory = os.path.dirname(historyPath)
+			fd, temporaryPath = tempfile.mkstemp(
+				prefix=".clipboardAnnouncer-history-",
+				suffix=".json",
+				dir=directory,
+			)
+			try:
+				with os.fdopen(fd, "w", encoding="utf-8") as historyFile:
+					json.dump(self._clipboardHistory, historyFile, ensure_ascii=False)
+					historyFile.flush()
+					os.fsync(historyFile.fileno())
+				os.replace(temporaryPath, historyPath)
+			except Exception:
+				if temporaryPath:
+					try:
+						os.unlink(temporaryPath)
+					except OSError:
+						pass
+		except OSError:
+			return
+
+	def _addClipboardHistoryEntry(self, entry, save=True):
+		if not self._isValidClipboardHistoryEntry(entry):
+			return None
+		entry = self._normalizeClipboardHistoryEntry(entry)
+		matchingEntries = [
+			existing
+			for existing in self._clipboardHistory
+			if self._clipboardHistoryEntriesMatch(existing, entry)
+		]
+		pinnedMatchingIndex = None
+		for index, existing in enumerate(self._clipboardHistory):
+			if (
+				self._clipboardHistoryEntriesMatch(existing, entry)
+				and existing.get("pinned", False)
+			):
+				pinnedMatchingIndex = sum(
+					1
+					for pinnedEntry in self._clipboardHistory[:index]
+					if pinnedEntry.get("pinned", False)
+				)
+				break
+		if any(existing.get("pinned", False) for existing in matchingEntries):
+			entry["pinned"] = True
+		self._clipboardHistory = [
+			existing
+			for existing in self._clipboardHistory
+			if not self._clipboardHistoryEntriesMatch(existing, entry)
+		]
+		if entry["pinned"]:
+			if pinnedMatchingIndex is not None:
+				self._clipboardHistory.insert(pinnedMatchingIndex, entry)
+			else:
+				self._clipboardHistory.insert(0, entry)
+		else:
+			pinnedCount = sum(
+				1 for existing in self._clipboardHistory if existing.get("pinned", False)
+			)
+			self._clipboardHistory.insert(pinnedCount, entry)
+		del self._clipboardHistory[CLIPBOARD_HISTORY_MAX_ITEMS:]
+		if save:
+			self._saveClipboardHistory()
+		return entry
+
+	def _clearClipboardHistory(self):
+		pinnedEntries = [
+			entry for entry in self._clipboardHistory if entry.get("pinned", False)
+		]
+		removedCount = len(self._clipboardHistory) - len(pinnedEntries)
+		self._clipboardHistory = pinnedEntries
+		self._saveClipboardHistory()
+		return removedCount, len(pinnedEntries)
+
+	def _setClipboardHistoryPinned(self, entry, pinned):
+		for index, existing in enumerate(self._clipboardHistory):
+			if self._clipboardHistoryEntriesMatch(existing, entry):
+				entry = self._clipboardHistory.pop(index)
+				entry["pinned"] = pinned
+				if pinned:
+					self._clipboardHistory.insert(0, entry)
+				else:
+					pinnedCount = sum(
+						1
+						for historyEntry in self._clipboardHistory
+						if historyEntry.get("pinned", False)
+					)
+					self._clipboardHistory.insert(pinnedCount, entry)
+				self._saveClipboardHistory()
+				return entry
+		return None
+
+	def _findClipboardHistoryEntryIndex(self, entry):
+		for index, existing in enumerate(self._clipboardHistory):
+			if self._clipboardHistoryEntriesMatch(existing, entry):
+				return index
+		return None
+
+	def _canMovePinnedClipboardHistoryEntry(self, entry, direction):
+		if direction not in (-1, 1) or not entry.get("pinned", False):
+			return False
+		index = self._findClipboardHistoryEntryIndex(entry)
+		if index is None:
+			return False
+		targetIndex = index + direction
+		return (
+			0 <= targetIndex < len(self._clipboardHistory)
+			and self._clipboardHistory[targetIndex].get("pinned", False)
+		)
+
+	def _movePinnedClipboardHistoryEntry(self, entry, direction):
+		if not self._canMovePinnedClipboardHistoryEntry(entry, direction):
+			return False
+		index = self._findClipboardHistoryEntryIndex(entry)
+		targetIndex = index + direction
+		self._clipboardHistory[index], self._clipboardHistory[targetIndex] = (
+			self._clipboardHistory[targetIndex],
+			self._clipboardHistory[index],
+		)
+		self._saveClipboardHistory()
+		return True
+
+	def _editClipboardHistoryText(self, entry, text):
+		if not text.strip():
+			raise ClipboardHistoryEmptyTextError()
+		if not self._textFitsClipboardHistory(text):
+			return None
+		self._clipboardHistory = [
+			existing
+			for existing in self._clipboardHistory
+			if not self._clipboardHistoryEntriesMatch(existing, entry)
+		]
+		updatedEntry = {
+			"type": "text",
+			"text": text,
+			"pinned": entry.get("pinned", False),
+		}
+		return self._addClipboardHistoryEntry(updatedEntry)
+
+	def _deleteClipboardHistoryEntry(self, entry):
+		self._clipboardHistory = [
+			existing
+			for existing in self._clipboardHistory
+			if not self._clipboardHistoryEntriesMatch(existing, entry)
+		]
+		self._saveClipboardHistory()
+
+	def _scheduleClipboardHistoryMonitor(self):
+		if self._clipboardHistoryMonitor and self._clipboardHistoryMonitor.IsRunning():
+			self._clipboardHistoryMonitor.Stop()
+		self._clipboardHistoryMonitor = wx.CallLater(
+			CLIPBOARD_HISTORY_POLL_INTERVAL_MS,
+			self._pollClipboardHistory,
+		)
+
+	def _stopClipboardHistoryMonitor(self):
+		if self._clipboardHistoryMonitor and self._clipboardHistoryMonitor.IsRunning():
+			self._clipboardHistoryMonitor.Stop()
+		self._clipboardHistoryMonitor = None
+
+	def _pollClipboardHistory(self):
+		self._clipboardHistoryMonitor = None
+		try:
+			currentSequenceNumber = self._getClipboardSequenceNumber()
+			if (
+				currentSequenceNumber is not None
+				and currentSequenceNumber != self._clipboardHistorySequenceNumber
+			):
+				if not _getConfig()["clipboardHistoryEnabled"]:
+					self._clipboardHistorySequenceNumber = currentSequenceNumber
+					return
+				entry = self._readClipboardHistoryEntry()
+				if entry is _UNSET:
+					return
+				self._clipboardHistorySequenceNumber = currentSequenceNumber
+				if entry:
+					self._addClipboardHistoryEntry(entry)
+		finally:
+			self._scheduleClipboardHistoryMonitor()
+
+	def _readClipboardHistoryEntry(self):
+		try:
+			self._openClipboard()
+		except ClipboardAccessError:
+			return _UNSET
+		try:
+			if CountClipboardFormats() == 0:
+				return None
+			if IsClipboardFormatAvailable(CF_HDROP):
+				paths = self._getOpenClipboardFileDropPaths()
+				return {"type": "files", "paths": paths} if paths else None
+			if IsClipboardFormatAvailable(CF_UNICODETEXT):
+				text = self._getOpenClipboardUnicodeText(CF_UNICODETEXT)
+				if text is not None and self._textFitsClipboardHistory(text):
+					return {"type": "text", "text": text}
+			if IsClipboardFormatAvailable(CF_TEXT):
+				text = self._getOpenClipboardAnsiText()
+				if text is not None and self._textFitsClipboardHistory(text):
+					return {"type": "text", "text": text}
+		except Exception:
+			return _UNSET
+		finally:
+			CloseClipboard()
+		return None
+
+	def _getOpenClipboardUnicodeText(self, clipboardFormat):
+		handle = GetClipboardData(clipboardFormat)
+		if not handle:
+			return None
+		address = GlobalLock(handle)
+		if not address:
+			return None
+		try:
+			return ctypes.wstring_at(address)
+		finally:
+			GlobalUnlock(handle)
+
+	def _getOpenClipboardAnsiText(self):
+		handle = GetClipboardData(CF_TEXT)
+		if not handle:
+			return None
+		address = GlobalLock(handle)
+		if not address:
+			return None
+		try:
+			return ctypes.string_at(address).decode("mbcs", errors="replace")
+		finally:
+			GlobalUnlock(handle)
+
+	def _getOpenClipboardFileDropPaths(self):
+		dropHandle = GetClipboardData(CF_HDROP)
+		if not dropHandle:
+			return []
+		fileCount = DragQueryFileW(dropHandle, 0xFFFFFFFF, None, 0)
+		paths = []
+		for index in range(fileCount):
+			length = DragQueryFileW(dropHandle, index, None, 0)
+			if not length:
+				continue
+			buffer = ctypes.create_unicode_buffer(length + 1)
+			if DragQueryFileW(dropHandle, index, buffer, length + 1):
+				paths.append(buffer.value)
+		return paths
+
 	def _announceAndPassThrough(self, gesture, message, configKey, actionName):
 		try:
 			if self._shouldAnnounceShortcut(configKey, actionName):
@@ -353,6 +909,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _announceCopyAndPassThrough(self, gesture, copyGesture=None):
 		copyGesture = copyGesture or gesture
 		if self._executeBrowseModeCopyScript(copyGesture):
+			return
+		if self._copySelectedFileSystemPathsForCopy(announceAsCopy=True):
 			return
 		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		try:
@@ -685,6 +1243,26 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					return window
 			except Exception:
 				continue
+		return self._getForegroundDesktopShellWindow(windows, foregroundHwnd)
+
+	def _getForegroundDesktopShellWindow(self, windows, foregroundHwnd):
+		try:
+			result = windows.FindWindowSW(
+				0,
+				None,
+				SWC_DESKTOP,
+				0,
+				SWFO_NEEDDISPATCH,
+			)
+		except Exception:
+			return None
+		candidates = result if isinstance(result, tuple) else (result,)
+		for window in candidates:
+			try:
+				if int(window.HWND) == foregroundHwnd:
+					return window
+			except Exception:
+				continue
 		return None
 
 	def _getSelectedFileSystemPaths(self):
@@ -701,6 +1279,54 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return len(self._extractStrictSelectedPaths(shellWindow))
 		except Exception:
 			return 0
+
+	def _copySelectedFileSystemPathsForCopy(
+		self,
+		requireSelection=True,
+		announceAsCopy=False,
+	):
+		if requireSelection:
+			shellWindow = self._getForegroundShellWindow()
+			paths = self._extractStrictSelectedPaths(shellWindow) if shellWindow else []
+		else:
+			paths = self._getSelectedFileSystemPaths()
+		if not paths:
+			return False
+		try:
+			self._copyTextToClipboard("\r\n".join(paths))
+		except ClipboardAccessError:
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireAccessProblems=True,
+			)
+			return True
+		if announceAsCopy:
+			self._announceExplorerPathCopy(paths)
+		else:
+			self._announceCopiedFileSystemPaths(paths)
+		return True
+
+	def _announceExplorerPathCopy(self, paths):
+		if self._shouldUseClipboardAwareness("announceCopy"):
+			if self._shouldAnnounceShortcut("announceCopy", "copy"):
+				clipboardType = "singleFile" if len(paths) == 1 else "multipleFiles"
+				ui.message(
+					self._getClipboardAwareMessage(
+						"copy",
+						{"type": clipboardType, "itemCount": len(paths)},
+					)
+				)
+			return
+		if self._shouldAnnounceShortcut("announceCopy", "copy"):
+			ui.message(_("Copy"))
+
+	def _announceCopiedFileSystemPaths(self, paths):
+		if not self._shouldAnnounceShortcut("announceCopyPath", "copyPath"):
+			return
+		if len(paths) == 1:
+			ui.message(_("Path copied"))
+			return
+		ui.message(_("Copied %d paths") % len(paths))
 
 	def _extractStrictSelectedPaths(self, shellWindow):
 		paths = []
@@ -751,6 +1377,75 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			wx.TheClipboard.Flush()
 		finally:
 			wx.TheClipboard.Close()
+
+	def _copyFilesToClipboard(self, paths):
+		if not wx.TheClipboard.Open():
+			raise ClipboardAccessError(_("Could not open the clipboard."))
+		try:
+			fileData = wx.FileDataObject()
+			for path in paths:
+				fileData.AddFile(path)
+			if not wx.TheClipboard.SetData(fileData):
+				raise ClipboardAccessError(_("Could not copy files to the clipboard."))
+			wx.TheClipboard.Flush()
+		finally:
+			wx.TheClipboard.Close()
+
+	def _showClipboardHistory(self):
+		if self._clipboardHistoryDialog:
+			self._clipboardHistoryDialog.Raise()
+			self._clipboardHistoryDialog.focusList()
+			return
+		self._clipboardHistoryPasteTargetHwnd = GetForegroundWindow()
+		dialog = ClipboardHistoryDialog(self, list(self._clipboardHistory))
+		self._clipboardHistoryDialog = dialog
+		gui.mainFrame.prePopup()
+		try:
+			gui.runScriptModalDialog(
+				dialog,
+				lambda result: self._onClipboardHistoryDialogResult(dialog, result),
+			)
+			dialog.focusList()
+		except Exception:
+			self._clipboardHistoryDialog = None
+			self._clipboardHistoryPasteTargetHwnd = None
+			gui.mainFrame.postPopup()
+			raise
+
+	def _onClipboardHistoryDialogResult(self, dialog, result):
+		try:
+			if self._clipboardHistoryDialog is not dialog:
+				return
+			self._clipboardHistoryDialog = None
+			targetHwnd = self._clipboardHistoryPasteTargetHwnd
+			self._clipboardHistoryPasteTargetHwnd = None
+			if result == wx.ID_OK and dialog.selectedEntry is not None:
+				self._selectClipboardHistoryItem(dialog.selectedEntry, targetHwnd)
+		finally:
+			gui.mainFrame.postPopup()
+
+	def _selectClipboardHistoryItem(self, entry, targetHwnd):
+		try:
+			if entry["type"] == "files":
+				self._copyFilesToClipboard(entry["paths"])
+			else:
+				self._copyTextToClipboard(entry["text"])
+		except (ClipboardAccessError, KeyError):
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireAccessProblems=True,
+			)
+			return
+		wx.CallLater(100, self._pasteClipboardHistoryItem, targetHwnd)
+
+	def _pasteClipboardHistoryItem(self, targetHwnd):
+		if not targetHwnd or not SetForegroundWindow(targetHwnd):
+			self._announceStatusMessage(_("Could not return to the original application"))
+			return
+		try:
+			keyboardHandler.KeyboardInputGesture.fromName("control+v").send()
+		except Exception:
+			self._announceStatusMessage(_("Could not paste clipboard history item"))
 
 	def _getClipboardText(self):
 		if not wx.TheClipboard.Open():
@@ -1284,6 +1979,43 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		)
 		gui.runScriptModalDialog(dialog, self._onClearClipboardConfirmationResult)
 
+	def _openClipboardHistoryAfterShortcutDelay(self):
+		self._clipboardHistoryShortcutTimer = None
+		self._showClipboardHistory()
+
+	def _handleClipboardHistoryShortcut(self):
+		if self._clipboardHistoryShortcutTimer:
+			if self._clipboardHistoryShortcutTimer.IsRunning():
+				self._clipboardHistoryShortcutTimer.Stop()
+			self._clipboardHistoryShortcutTimer = None
+			self._requestClipboardClear()
+			return
+		self._clipboardHistoryShortcutTimer = wx.CallLater(
+			CLIPBOARD_HISTORY_DOUBLE_PRESS_WINDOW_MS,
+			self._openClipboardHistoryAfterShortcutDelay,
+		)
+
+	def _requestClipboardClear(self):
+		try:
+			clipboardState = self._getClipboardState()
+		except ClipboardAccessError:
+			self._announceStatusMessage(
+				_("Could not access clipboard"),
+				requireClearResult=True,
+				requireAccessProblems=True,
+			)
+			return
+		if clipboardState == "empty":
+			self._announceStatusMessage(
+				_("Clipboard is already empty"),
+				requireClearResult=True,
+			)
+			return
+		if _getConfig()["confirmBeforeClear"]:
+			self._showClearClipboardConfirmation()
+			return
+		self._performClipboardClear()
+
 	@script(
 		description=_("Open the Clipboard Announcer settings panel."),
 		speakOnDemand=True,
@@ -1314,26 +2046,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		speakOnDemand=True,
 	)
 	def script_copySelectedPath(self, gesture):
-		paths = self._getSelectedFileSystemPaths()
-		if not paths:
+		if not self._copySelectedFileSystemPathsForCopy(requireSelection=False):
 			gesture.send()
-			return
-
-		try:
-			self._copyTextToClipboard("\r\n".join(paths))
-		except ClipboardAccessError:
-			self._announceStatusMessage(
-				_("Could not access clipboard"),
-				requireAccessProblems=True,
-			)
-			return
-
-		if not self._shouldAnnounceShortcut("announceCopyPath", "copyPath"):
-			return
-		if len(paths) == 1:
-			ui.message(_("Path copied"))
-			return
-		ui.message(_("Copied %d paths") % len(paths))
 
 	@script(
 		description=_("Announce Copy."),
@@ -1393,27 +2107,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._announceAndPassThrough(gesture, _("Redo"), "announceRedo", "redo")
 
 	@script(
-		description=_("Clear Clipboard."),
+		description=_("Open clipboard history. Press twice quickly to clear the clipboard."),
 		gesture="kb:control+shift+x",
 		speakOnDemand=True,
 	)
 	def script_clearClipboard(self, gesture):
-		try:
-			clipboardState = self._getClipboardState()
-		except ClipboardAccessError:
-			self._announceStatusMessage(
-				_("Could not access clipboard"),
-				requireClearResult=True,
-				requireAccessProblems=True,
-			)
+		if not _getConfig()["clipboardHistoryEnabled"]:
+			self._requestClipboardClear()
 			return
-		if clipboardState == "empty":
-			self._announceStatusMessage(
-				_("Clipboard is already empty"),
-				requireClearResult=True,
-			)
-			return
-		if _getConfig()["confirmBeforeClear"]:
-			self._showClearClipboardConfirmation()
-			return
-		self._performClipboardClear()
+		self._handleClipboardHistoryShortcut()

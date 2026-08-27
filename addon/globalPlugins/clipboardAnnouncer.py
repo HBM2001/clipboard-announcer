@@ -212,6 +212,13 @@ class ClipboardHistoryDialog(wx.Dialog):
 
 	def _onCharHook(self, evt):
 		keyCode = evt.GetKeyCode()
+		if evt.ControlDown():
+			if keyCode == wx.WXK_PAGEUP:
+				self._moveSelectedPinnedEntry(-1)
+				return
+			if keyCode == wx.WXK_PAGEDOWN:
+				self._moveSelectedPinnedEntry(1)
+				return
 		if keyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
 			self._activateSelected()
 			return
@@ -241,6 +248,11 @@ class ClipboardHistoryDialog(wx.Dialog):
 	def _onClear(self, evt):
 		self._plugin._clearClipboardHistoryWithStatus()
 		self._refreshEntries()
+
+	def _moveSelectedPinnedEntry(self, direction):
+		selection = self._list.GetSelection()
+		if selection != wx.NOT_FOUND:
+			self._onMovePinned(self._entries[selection], direction)
 
 	def _onContextMenu(self, evt):
 		position = evt.GetPosition()

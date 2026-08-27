@@ -37,7 +37,7 @@ APPEND_COPY_DISPATCH_DELAY_MS = 40
 APPEND_COPY_DISPATCH_RETRY_MS = 25
 APPEND_COPY_DISPATCH_MAX_RETRIES = 40
 CLIPBOARD_HISTORY_POLL_INTERVAL_MS = 250
-CLIPBOARD_HISTORY_DOUBLE_PRESS_WINDOW_MS = 600
+CLIPBOARD_HISTORY_SHORTCUT_WINDOW_MS = 600
 CLIPBOARD_HISTORY_MAX_ITEMS = 500
 CLIPBOARD_HISTORY_MAX_TEXT_BYTES = 1024 * 1024
 CLIPBOARD_HISTORY_FILE_NAME = "clipboardAnnouncer-history.json"
@@ -200,13 +200,15 @@ class ClipboardHistoryDialog(wx.Dialog):
 		self._list.SetFocus()
 
 	def _labelFor(self, entry):
-		pinnedPrefix = _("Pinned: ") if entry.get("pinned", False) else ""
 		if entry["type"] == "files":
 			paths = entry["paths"]
-			firstPath = paths[0] if paths else ""
-			return pinnedPrefix + firstPath
-		text = entry["text"].replace("\r", " ").replace("\n", " ").strip()
-		return pinnedPrefix + (text[:120] or _("(empty text)"))
+			label = paths[0] if paths else ""
+		else:
+			text = entry["text"].replace("\r", " ").replace("\n", " ").strip()
+			label = text[:120] or _("(empty text)")
+		if entry.get("pinned", False):
+			return "{}, {}".format(label, _("Pinned"))
+		return label
 
 	def _onCharHook(self, evt):
 		keyCode = evt.GetKeyCode()
@@ -237,15 +239,8 @@ class ClipboardHistoryDialog(wx.Dialog):
 			self.EndModal(wx.ID_OK)
 
 	def _onClear(self, evt):
-		removedCount, pinnedCount = self._plugin._clearClipboardHistory()
+		self._plugin._clearClipboardHistoryWithStatus()
 		self._refreshEntries()
-		if pinnedCount:
-			ui.message(
-				_("Cleared %d history items. Kept %d pinned items.")
-				% (removedCount, pinnedCount)
-			)
-			return
-		ui.message(_("Cleared %d history items.") % removedCount)
 
 	def _onContextMenu(self, evt):
 		position = evt.GetPosition()
@@ -539,6 +534,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._clipboardHistoryMonitor = None
 		self._clipboardHistorySequenceNumber = None
 		self._clipboardHistoryShortcutTimer = None
+		self._clipboardHistoryShortcutPressCount = 0
 		self._clipboardHistoryDialog = None
 		self._clipboardHistoryPasteTargetHwnd = None
 		self._registerConfig()
@@ -552,6 +548,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._clipboardHistoryShortcutTimer and self._clipboardHistoryShortcutTimer.IsRunning():
 			self._clipboardHistoryShortcutTimer.Stop()
 		self._clipboardHistoryShortcutTimer = None
+		self._clipboardHistoryShortcutPressCount = 0
 		if self._clipboardHistoryDialog:
 			self._clipboardHistoryDialog.Destroy()
 			self._clipboardHistoryDialog = None
@@ -728,6 +725,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._clipboardHistory = pinnedEntries
 		self._saveClipboardHistory()
 		return removedCount, len(pinnedEntries)
+
+	def _clearClipboardHistoryWithStatus(self):
+		removedCount, pinnedCount = self._clearClipboardHistory()
+		if pinnedCount:
+			ui.message(
+				_("Cleared %d history items. Kept %d pinned items.")
+				% (removedCount, pinnedCount)
+			)
+			return
+		ui.message(_("Cleared %d history items.") % removedCount)
 
 	def _setClipboardHistoryPinned(self, entry, pinned):
 		for index, existing in enumerate(self._clipboardHistory):
@@ -909,8 +916,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _announceCopyAndPassThrough(self, gesture, copyGesture=None):
 		copyGesture = copyGesture or gesture
 		if self._executeBrowseModeCopyScript(copyGesture):
-			return
-		if self._copySelectedFileSystemPathsForCopy(announceAsCopy=True):
 			return
 		clipboardSequenceNumber = self._getClipboardSequenceNumber()
 		try:
@@ -1283,7 +1288,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _copySelectedFileSystemPathsForCopy(
 		self,
 		requireSelection=True,
-		announceAsCopy=False,
 	):
 		if requireSelection:
 			shellWindow = self._getForegroundShellWindow()
@@ -1300,25 +1304,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				requireAccessProblems=True,
 			)
 			return True
-		if announceAsCopy:
-			self._announceExplorerPathCopy(paths)
-		else:
-			self._announceCopiedFileSystemPaths(paths)
+		self._announceCopiedFileSystemPaths(paths)
 		return True
-
-	def _announceExplorerPathCopy(self, paths):
-		if self._shouldUseClipboardAwareness("announceCopy"):
-			if self._shouldAnnounceShortcut("announceCopy", "copy"):
-				clipboardType = "singleFile" if len(paths) == 1 else "multipleFiles"
-				ui.message(
-					self._getClipboardAwareMessage(
-						"copy",
-						{"type": clipboardType, "itemCount": len(paths)},
-					)
-				)
-			return
-		if self._shouldAnnounceShortcut("announceCopy", "copy"):
-			ui.message(_("Copy"))
 
 	def _announceCopiedFileSystemPaths(self, paths):
 		if not self._shouldAnnounceShortcut("announceCopyPath", "copyPath"):
@@ -1979,20 +1966,30 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		)
 		gui.runScriptModalDialog(dialog, self._onClearClipboardConfirmationResult)
 
-	def _openClipboardHistoryAfterShortcutDelay(self):
+	def _handleClipboardHistoryShortcutAfterDelay(self):
 		self._clipboardHistoryShortcutTimer = None
-		self._showClipboardHistory()
+		pressCount = self._clipboardHistoryShortcutPressCount
+		self._clipboardHistoryShortcutPressCount = 0
+		if pressCount == 1:
+			self._showClipboardHistory()
+			return
+		if pressCount == 2:
+			self._clearClipboardHistoryWithStatus()
 
 	def _handleClipboardHistoryShortcut(self):
-		if self._clipboardHistoryShortcutTimer:
-			if self._clipboardHistoryShortcutTimer.IsRunning():
+		self._clipboardHistoryShortcutPressCount += 1
+		if self._clipboardHistoryShortcutPressCount >= 3:
+			if self._clipboardHistoryShortcutTimer and self._clipboardHistoryShortcutTimer.IsRunning():
 				self._clipboardHistoryShortcutTimer.Stop()
 			self._clipboardHistoryShortcutTimer = None
+			self._clipboardHistoryShortcutPressCount = 0
 			self._requestClipboardClear()
 			return
+		if self._clipboardHistoryShortcutTimer and self._clipboardHistoryShortcutTimer.IsRunning():
+			self._clipboardHistoryShortcutTimer.Stop()
 		self._clipboardHistoryShortcutTimer = wx.CallLater(
-			CLIPBOARD_HISTORY_DOUBLE_PRESS_WINDOW_MS,
-			self._openClipboardHistoryAfterShortcutDelay,
+			CLIPBOARD_HISTORY_SHORTCUT_WINDOW_MS,
+			self._handleClipboardHistoryShortcutAfterDelay,
 		)
 
 	def _requestClipboardClear(self):
@@ -2107,7 +2104,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._announceAndPassThrough(gesture, _("Redo"), "announceRedo", "redo")
 
 	@script(
-		description=_("Open clipboard history. Press twice quickly to clear the clipboard."),
+		description=_("Open clipboard history. Press twice quickly to clear history or three times to clear the clipboard."),
 		gesture="kb:control+shift+x",
 		speakOnDemand=True,
 	)

@@ -27,7 +27,7 @@ After installation, you can review or change the add-on settings from the NVDA S
 
 ## Default shortcuts
 
-- `Ctrl+C`: Copy selected Windows Explorer or Desktop file and folder paths as text; elsewhere, announce copy or, when enabled, identify copied clipboard content, announce file counts, or report when nothing is selected
+- `Ctrl+C`: Announce copy, or when enabled, identify copied clipboard content, announce file counts for copied items, or report when nothing is selected
 - `Ctrl+X`: Announce cut, or when enabled, announce file counts for cut items or report when nothing is selected
 - `Ctrl+V`: Announce paste, or identify clipboard content being pasted and warn if the clipboard is empty when enabled
 - `Ctrl+A`: Announce select all
@@ -35,7 +35,7 @@ After installation, you can review or change the add-on settings from the NVDA S
 - `Ctrl+Y`: Announce redo
 - `Ctrl+Shift+S`: Temporarily disable or enable Clipboard Announcer
 - `Ctrl+Shift+C`: Copy the selected file or folder path
-- `Ctrl+Shift+X`: Open clipboard history; press it twice within 0.6 seconds to clear the clipboard. Disable clipboard history in Clipboard Announcer settings to make this shortcut clear the clipboard immediately.
+- `Ctrl+Shift+X`: Open clipboard history; press it twice within 0.6 seconds to clear clipboard history while keeping pinned items, or three times to clear the clipboard. Disable clipboard history in Clipboard Announcer settings to make this shortcut clear the clipboard immediately.
 
 ## Clipboard history
 

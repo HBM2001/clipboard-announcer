@@ -1,3 +1,10 @@
+## 1.3.3
+
+- Added persistent clipboard history for copied text and files.
+- Added controls to pin, reorder, edit, and delete clipboard history items.
+- `Ctrl+Shift+X` now opens clipboard history; press it twice quickly to clear the clipboard. Clipboard history can be disabled in settings to restore immediate clearing.
+- Fixed delayed Copy feedback and preserved native NVDA Copy behavior in browse mode.
+
 ## 1.3.1
 
 - Added Ukrainian translation. Thanks to George-br.

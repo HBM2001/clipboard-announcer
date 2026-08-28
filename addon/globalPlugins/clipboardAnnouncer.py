@@ -200,19 +200,34 @@ class ClipboardHistoryDialog(wx.Dialog):
 		self._list.SetFocus()
 
 	def _labelFor(self, entry):
-		if entry["type"] == "files":
-			paths = entry["paths"]
-			label = paths[0] if paths else ""
+		displayName = entry.get("displayName")
+		if isinstance(displayName, str) and displayName:
+			label = displayName
 		else:
-			text = entry["text"].replace("\r", " ").replace("\n", " ").strip()
-			label = text[:120] or _("(empty text)")
+			label = self._defaultLabelFor(entry)
 		if entry.get("pinned", False):
 			return "{}, {}".format(label, _("Pinned"))
 		return label
 
+	def _defaultLabelFor(self, entry):
+		if entry["type"] == "files":
+			paths = entry["paths"]
+			return paths[0] if paths else ""
+		text = entry["text"].replace("\r", " ").replace("\n", " ").strip()
+		return text[:120] or _("(empty text)")
+
 	def _onCharHook(self, evt):
 		keyCode = evt.GetKeyCode()
 		if evt.ControlDown():
+			if keyCode in (ord("P"), ord("p")):
+				self._toggleSelectedHistoryPinned()
+				return
+			if keyCode in (ord("E"), ord("e")):
+				self._editSelectedHistoryEntry()
+				return
+			if keyCode in (ord("R"), ord("r")):
+				self._renameSelectedHistoryDisplayName()
+				return
 			if keyCode == wx.WXK_PAGEUP:
 				self._moveSelectedPinnedEntry(-1)
 				return
@@ -254,6 +269,28 @@ class ClipboardHistoryDialog(wx.Dialog):
 		if selection != wx.NOT_FOUND:
 			self._onMovePinned(self._entries[selection], direction)
 
+	def _toggleSelectedHistoryPinned(self):
+		selection = self._list.GetSelection()
+		if selection == wx.NOT_FOUND:
+			return
+		entry = self._entries[selection]
+		updatedEntry = self._plugin._setClipboardHistoryPinned(
+			entry,
+			not entry.get("pinned", False),
+		)
+		if updatedEntry is not None:
+			self._refreshEntries(updatedEntry)
+
+	def _editSelectedHistoryEntry(self):
+		selection = self._list.GetSelection()
+		if selection != wx.NOT_FOUND:
+			self._onEdit(self._entries[selection])
+
+	def _renameSelectedHistoryDisplayName(self):
+		selection = self._list.GetSelection()
+		if selection != wx.NOT_FOUND:
+			self._onRenameDisplayName(self._entries[selection])
+
 	def _onContextMenu(self, evt):
 		position = evt.GetPosition()
 		if position != wx.DefaultPosition:
@@ -277,12 +314,14 @@ class ClipboardHistoryDialog(wx.Dialog):
 		moveDownItem = menu.Append(wx.ID_ANY, _("Move pinned item down"))
 		moveUpItem.Enable(self._plugin._canMovePinnedClipboardHistoryEntry(entry, -1))
 		moveDownItem.Enable(self._plugin._canMovePinnedClipboardHistoryEntry(entry, 1))
+		renameDisplayNameItem = menu.Append(wx.ID_ANY, _("Rename display name"))
 		editItem = menu.Append(wx.ID_ANY, _("Edit"))
 		editItem.Enable(entry["type"] == "text")
 		deleteItem = menu.Append(wx.ID_ANY, _("Delete"))
 		menu.Bind(wx.EVT_MENU, lambda evt: self._onPin(entry), pinItem)
 		menu.Bind(wx.EVT_MENU, lambda evt: self._onMovePinned(entry, -1), moveUpItem)
 		menu.Bind(wx.EVT_MENU, lambda evt: self._onMovePinned(entry, 1), moveDownItem)
+		menu.Bind(wx.EVT_MENU, lambda evt: self._onRenameDisplayName(entry), renameDisplayNameItem)
 		menu.Bind(wx.EVT_MENU, lambda evt: self._onEdit(entry), editItem)
 		menu.Bind(wx.EVT_MENU, lambda evt: self._onDelete(entry), deleteItem)
 		try:
@@ -297,6 +336,25 @@ class ClipboardHistoryDialog(wx.Dialog):
 	def _onMovePinned(self, entry, direction):
 		if self._plugin._movePinnedClipboardHistoryEntry(entry, direction):
 			self._refreshEntries(entry)
+
+	def _onRenameDisplayName(self, entry):
+		dialog = wx.TextEntryDialog(
+			self,
+			_("Enter a display name for this history item. Leave it empty to restore the original name."),
+			_("Rename display name"),
+			value=entry.get("displayName", self._defaultLabelFor(entry)),
+		)
+		try:
+			if dialog.ShowModal() != wx.ID_OK:
+				return
+			updatedEntry = self._plugin._renameClipboardHistoryDisplayName(
+				entry,
+				dialog.GetValue(),
+			)
+		finally:
+			dialog.Destroy()
+		if updatedEntry is not None:
+			self._refreshEntries(updatedEntry)
 
 	def _onEdit(self, entry):
 		if entry["type"] != "text":
@@ -627,6 +685,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _isValidClipboardHistoryEntry(self, entry):
 		if not isinstance(entry, dict):
 			return False
+		displayName = entry.get("displayName")
+		if displayName is not None and not isinstance(displayName, str):
+			return False
 		if entry.get("type") == "text":
 			return isinstance(entry.get("text"), str) and self._textFitsClipboardHistory(
 				entry["text"]
@@ -643,6 +704,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _normalizeClipboardHistoryEntry(self, entry):
 		normalizedEntry = dict(entry)
 		normalizedEntry["pinned"] = bool(entry.get("pinned", False))
+		displayName = normalizedEntry.get("displayName")
+		if isinstance(displayName, str) and displayName.strip():
+			normalizedEntry["displayName"] = displayName.strip()
+		else:
+			normalizedEntry.pop("displayName", None)
 		return normalizedEntry
 
 	def _clipboardHistoryEntriesMatch(self, firstEntry, secondEntry):
@@ -709,6 +775,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				break
 		if any(existing.get("pinned", False) for existing in matchingEntries):
 			entry["pinned"] = True
+		for existing in matchingEntries:
+			displayName = existing.get("displayName")
+			if isinstance(displayName, str) and displayName:
+				entry["displayName"] = displayName
+				break
 		self._clipboardHistory = [
 			existing
 			for existing in self._clipboardHistory
@@ -811,7 +882,24 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			"text": text,
 			"pinned": entry.get("pinned", False),
 		}
+		displayName = entry.get("displayName")
+		if isinstance(displayName, str) and displayName:
+			updatedEntry["displayName"] = displayName
 		return self._addClipboardHistoryEntry(updatedEntry)
+
+	def _renameClipboardHistoryDisplayName(self, entry, displayName):
+		index = self._findClipboardHistoryEntryIndex(entry)
+		if index is None:
+			return None
+		updatedEntry = dict(self._clipboardHistory[index])
+		displayName = displayName.strip()
+		if displayName:
+			updatedEntry["displayName"] = displayName
+		else:
+			updatedEntry.pop("displayName", None)
+		self._clipboardHistory[index] = updatedEntry
+		self._saveClipboardHistory()
+		return updatedEntry
 
 	def _deleteClipboardHistoryEntry(self, entry):
 		self._clipboardHistory = [

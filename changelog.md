@@ -2,6 +2,8 @@
 
 - Added persistent clipboard history for copied text and files.
 - Added controls to pin, reorder, edit, and delete clipboard history items.
+- Added custom display names for history items without changing their clipboard text or files.
+- Added Clipboard History dialog shortcuts: `Ctrl+P` to pin or unpin an item, `Ctrl+E` to edit text, `Ctrl+R` to rename a display name, and `Ctrl+Page Up` / `Ctrl+Page Down` to reorder pinned items.
 - `Ctrl+Shift+X` now opens clipboard history; press it twice quickly to clear history while keeping pinned items, or three times to clear the clipboard. Clipboard history can be disabled in settings to restore immediate clearing.
 - Fixed delayed Copy feedback and preserved native NVDA Copy behavior in browse mode.
 
